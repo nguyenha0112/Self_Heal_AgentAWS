@@ -1,7 +1,7 @@
 # Requirements Analysis - Task Force 3 Self-Heal Engine - CDO-02
 
 **Doc owner:** CDO-02  
-**Trạng thái:** Draft cho W11 Pack #1  
+**Trạng thái:** Ready for W11 Pack #1 review  
 **Cập nhật lần cuối:** 2026-06-23  
 
 ## 1. Bối cảnh đề tài
@@ -65,7 +65,9 @@ CDO-02 không làm các phần sau trong scope capstone:
 - **Trade-off chấp nhận:** Chi phí và độ phức tạp vận hành cao hơn serverless-first, nhưng đổi lại sát đề bài hơn, dễ chứng minh tenant isolation/RBAC hơn và phù hợp với self-heal trên Kubernetes workload.
 - **Locked T3 W11:** 2026-06-23.
 
-## 6. Target Patterns (cần bàn với AI)
+## 6. Target Patterns / Dataset Scope (cần bàn với AI)
+
+Theo contract hiện tại của AI, phạm vi dữ liệu được căn theo **RE2/RE3 dataset** và hệ thống mẫu **Online Boutique**. Vì vậy CDO-02 cần align pattern demo với các signals/actions mà AI contract đã định nghĩa, thay vì tự đặt pattern theo tên quá chung chung.
 
 ### 6.1 Patterns build thật
 
@@ -73,9 +75,9 @@ CDO-02 đề xuất 3 patterns build thật:
 
 | Pattern | Action CDO dự kiến | Lý do chọn |
 |---|---|---|
-| `service_stuck` | Rollout restart deployment | Dễ demo, sát với đề bài, action rõ ràng |
-| `OOMKilled` / `high_restart_count` | Restart hoặc escalate với context bundle | Có Kubernetes event/metric rõ |
-| `queue_backlog` | Scale worker trong max limit | Thể hiện orchestration và blast-radius |
+| Service stuck / latency spike | `RESTART_DEPLOYMENT` | Khớp telemetry `istio_request_latency_p95` và action trong AI API Contract |
+| Error rate spike / code-level fault | `RESTART_DEPLOYMENT` hoặc escalate với context bundle | Khớp `istio_request_error_rate`, `app_log_error_event`, `trace_span_error_event` |
+| Memory pressure / OOM prevention | `ADJUST_MEMORY_LIMIT` hoặc escalate nếu không đủ an toàn | Khớp telemetry `container_memory_working_set_bytes` |
 
 ### 6.2 Patterns design-only
 
@@ -83,8 +85,8 @@ CDO-02 đề xuất 2 patterns design-only:
 
 | Pattern | Action thiết kế | Lý do design-only |
 |---|---|---|
-| `bad_deployment_rollout` | Rollback rollout revision | Cần rollout history và setup kỹ hơn |
-| `node_pressure` | Cordon/drain hoặc reschedule | Risk cao, không nên execute thật trong scope demo sớm |
+| Queue/backpressure | `SCALE_UP_PODS` | Action có trong AI contract, nhưng cần dữ liệu queue rõ hơn |
+| Secret/cert/config issue | `UPDATE_ENV_SECRET` | Action có trong AI contract, nhưng rủi ro cao hơn nên để design-only nếu chưa đủ guardrail |
 
 Danh sách pattern cuối cùng cần được confirm với AI team trước khi ký contract.
 
@@ -99,56 +101,184 @@ Danh sách pattern cuối cùng cần được confirm với AI team trước kh
 | Audit retention | >= 90 ngày | SOC2/compliance requirement |
 | Safety checkpoint | Dry-run, blast-radius, verify, rollback, circuit breaker | Hard requirement của TF3 |
 | AI endpoint timeout handling | Timeout/503 -> no execute, escalate + audit | Prevent unsafe automated action |
-| Observability | Logs + metrics + K8s events first; traces optional | Đủ để support 3 known patterns đầu |
+| Observability | Logs + metrics + traces theo AI contract | Cần đủ dữ liệu cho detect/decide/verify và trace end-to-end |
 | Cost control | W11 draft estimate, W12 refine with evidence | Tránh over-architecting |
 
-## 8. AI-CDO Contract Dependencies (cần bàn với AI)
+## 8. Clarifications Needed From Client/Trainer
 
-CDO-02 cần AI team cung cấp và ký 3 contracts:
+Các điểm dưới đây cần hỏi trainer/mentor đóng vai client trước khi chốt final, vì nếu tự giả định sai thì có thể ảnh hưởng thiết kế W12.
 
-1. **Telemetry Contract**: AI cần logs/metrics/events nào từ CDO cho từng pattern.
-2. **AI API Contract**: CDO gọi endpoint nào, request schema là gì, response schema là gì.
-3. **Deployment Contract**: AI endpoint deploy ở đâu, auth/timeout/retry/fallback như thế nào.
+| Chủ đề | Câu hỏi cần hỏi trainer/client | Ảnh hưởng nếu chưa chốt |
+|---|---|---|
+| Sandbox environment | T6/W12 có bắt buộc dùng EKS thật không, hay Kubernetes sandbox/local được chấp nhận nếu có evidence rõ? | Ảnh hưởng infra design và deployment plan |
+| Region | Client/trainer có bắt buộc `us-east-1` theo brief không? | Ảnh hưởng Terraform variables, cost estimate, deployment |
+| Audit storage | Audit có bắt buộc S3 Object Lock không, hay append-only log/DB được chấp nhận cho capstone? | Ảnh hưởng security design và cost |
+| Auto-resolved definition | Một incident được tính auto-resolved khi action execute thành công hay khi metrics trở lại normal sau verify? | Ảnh hưởng test report và success criteria |
+| Blast-radius limit | Một lần self-heal được thao tác tối đa bao nhiêu deployment/replica/namespace? | Ảnh hưởng safety gate |
+| Escalation policy | Retry mấy lần trước khi escalate? Escalation message cần format Slack/Markdown/JSON? | Ảnh hưởng workflow và AI response |
+| Observability requirement | Traces trong AI contract cần triển khai đầy đủ ở W12 hay chấp nhận phased implementation? | Ảnh hưởng tool choice: CloudWatch, Prometheus, X-Ray/OpenTelemetry |
+| Offline simulation | Trainer có chấp nhận Mock Mode theo RE2/RE3 dataset cho action như restart/scale không? | Ảnh hưởng demo và test evidence |
 
-CDO-02 yêu cầu contract phải làm rõ:
+Trong khi chờ trainer/client confirm, CDO-02 sẽ ghi các điểm này là **assumption**, không xem là quyết định cuối cùng.
 
-- Endpoints: `POST /v1/detect`, `POST /v1/decide`, `POST /v1/verify`.
-- Required request fields: `correlation_id`, `idempotency_key`, `tenant_id`, `namespace`, `dry_run_mode`, `alert`, `context`.
-- `/v1/decide` response phải có: `decision`, `pattern`, `confidence`, `action_plan`, `target`, `blast_radius`, `rollback_plan`, `verify_plan`.
-- AI không giữ kubeconfig và không gọi Kubernetes trực tiếp.
-- Nếu AI timeout/503: CDO không execute, chỉ escalate và audit.
+## 9. AI-CDO Contract Dependencies (cần bàn với AI)
 
-## 9. Assumptions
+AI team đã publish 3 contracts tại repo `AIops-g4/Capstone-Phase-2-Code/tf-3/ai/contracts`. CDO-02 cập nhật requirement theo các điểm chính dưới đây.
+
+Mục tiêu của CDO-02 trong Pack #1 là chứng minh platform design **consume được contract của AI**, không tự thiết kế lệch interface. Các phần telemetry, API integration, security và deployment của CDO-02 sẽ bám theo 3 contract này, trừ các điểm cần push-back/clarify ở mục 9.4.
+
+### 9.1 Telemetry Contract
+
+CDO-02 cần thu thập/chuẩn hóa và gửi các signals sau cho AI:
+
+| Signal | CDO responsibility | Used for |
+|---|---|---|
+| `istio_request_error_rate` | Tính từ error/request counters, emit mỗi 5 giây | Detect và verify lỗi service |
+| `istio_request_latency_p95` | Đọc latency p95 từ metrics source | Detect service stuck/latency spike |
+| `container_memory_working_set_bytes` | Đọc memory usage theo container/pod | Detect memory pressure/OOM prevention |
+| `app_log_error_event` | Parse logs ERROR/stack trace | Diagnose code-level fault |
+| `trace_span_error_event` | Parse traces có lỗi span | Diagnose lỗi liên dịch vụ |
+
+Yêu cầu chung từ AI contract:
+
+- Mọi signal phải có `tenant_id`.
+- Với offline dataset, CDO inject `tenant_id` là `tnt-re2-simulation` hoặc `tnt-re3-simulation`.
+- Timestamp dùng RFC3339 UTC.
+- CDO phải lọc/mã hóa PII trước khi gửi log sang AI.
+
+CDO-02 sẽ đáp ứng bằng cách:
+
+- Thiết kế telemetry pipeline ưu tiên CloudWatch/Container Insights/Prometheus-compatible metrics.
+- Chuẩn hóa metrics/logs/traces thành JSON trước khi gọi AI API.
+- Gắn `tenant_id`, `correlation_id` và timestamp UTC cho mọi request.
+- Với W11 Pack #1, mô tả schema và nguồn dữ liệu; W12 mới thu evidence thật từ sandbox.
+- Traces được giữ trong schema theo AI contract; mức triển khai thực tế sẽ được chốt trong W12 plan và phụ thuộc thời gian tích hợp OpenTelemetry/X-Ray.
+
+### 9.2 AI API Contract
+
+Endpoint AI cung cấp:
+
+```text
+POST /v1/detect
+POST /v1/decide
+POST /v1/verify
+```
+
+Authentication và headers:
+
+```text
+Authorization: IAM SigV4
+X-Tenant-Id: cdo-2 / tnt-re2-simulation / tnt-re3-simulation
+Idempotency-Key: UUID v4 cho request thay đổi trạng thái
+X-Correlation-Id hoặc correlation_id để trace toàn bộ workflow
+```
+
+Luồng tích hợp:
+
+```text
+/v1/detect -> AI trả anomaly_detected, severity, anomaly_context, confidence, correlation_id
+/v1/decide -> AI trả matched_runbook, action_plan[], blast_radius_config
+CDO execute/mock execute action
+/v1/verify -> AI trả success, regression_detected, next_action, escalation_bundle nếu cần
+```
+
+Các action AI contract đang định nghĩa:
+
+```text
+RESTART_DEPLOYMENT
+SCALE_UP_PODS
+UPDATE_ENV_SECRET
+ADJUST_MEMORY_LIMIT
+```
+
+SLA/API behavior từ contract:
+
+- `/v1/detect` p99 < 300ms.
+- `/v1/decide` p99 < 500ms.
+- `/v1/verify` p99 < 500ms.
+- Availability target 99.9%.
+- Rate limit 120 requests/minute/tenant.
+- `400`: không retry tự động.
+- `409`: trùng `Idempotency-Key`.
+- `429`: exponential backoff.
+- `503`: CDO phải fallback bằng static runbook hoặc escalation.
+
+CDO-02 sẽ đáp ứng bằng cách:
+
+- Xây executor/safety gate consume `action_plan[]` từ `/v1/decide`.
+- Chỉ execute các action nằm trong allow-list của contract: `RESTART_DEPLOYMENT`, `SCALE_UP_PODS`, `UPDATE_ENV_SECRET`, `ADJUST_MEMORY_LIMIT`.
+- Validate `tenant_id`, target namespace, blast-radius, rollback plan và verify plan trước khi execute.
+- Dùng `Idempotency-Key` để tránh execute trùng một incident.
+- Với `429`, dùng retry/backoff theo contract.
+- Với `503`, mặc định không tự ý execute; CDO sẽ escalate + audit, trừ khi static runbook fallback đã được AI/CDO thống nhất.
+
+### 9.3 Deployment Contract
+
+Theo contract AI:
+
+- AI Engine chạy dạng shared backend service trên **ECS Fargate**.
+- Endpoint nội bộ: `https://ai-engine.tf-3.internal/`.
+- Auth: IAM SigV4.
+- Tenant ID cho CDO-02: `cdo-2`.
+- AI service chạy private subnet, internal ALB, port `8080`.
+- Health endpoints: `GET /health`, `GET /ready`, `GET /metrics`.
+- Logs: CloudWatch Logs.
+- Metrics: Prometheus endpoint.
+- Traces: OpenTelemetry -> Jaeger hoặc AWS X-Ray.
+- Audit: S3 Object Lock Compliance Mode, retention tối thiểu 90 ngày.
+
+CDO-02 sẽ đáp ứng bằng cách:
+
+- Thiết kế network path để CDO executor gọi AI endpoint nội bộ theo deployment contract.
+- Sử dụng IAM SigV4 theo yêu cầu auth của AI.
+- Gắn tenant ID `cdo-2` cho requests của CDO-02.
+- Ghi log request/response theo `correlation_id` để trace được end-to-end.
+- Thiết kế audit storage tương thích S3 Object Lock 90 ngày.
+- Tách rõ AI endpoint là decision service; CDO executor là nơi enforce safety và execute action, trừ khi AI/CDO thống nhất lại boundary khác.
+
+### 9.4 Điểm CDO cần push-back / clarify với AI
+
+Deployment contract hiện có một điểm cần làm rõ: tài liệu AI nhắc tới việc AI Task Role có thể fetch kubeconfig và gọi EKS API để execute self-heal actions. Điều này có thể mâu thuẫn với angle CDO-02 đã chọn: **AI chỉ decide, CDO executor mới mutate Kubernetes**.
+
+CDO-02 cần chốt lại với AI:
+
+- AI có thật sự cần kubeconfig không?
+- AI có execute action trực tiếp không, hay chỉ trả `action_plan` cho CDO?
+- Nếu AI giữ kubeconfig, boundary RBAC cụ thể ra sao?
+- Nếu CDO là executor duy nhất, cần sửa Deployment Contract để bỏ quyền AI gọi EKS API.
+- Offline Simulation Mode nghĩa là CDO chỉ mock execute action, vậy evidence W12 sẽ là mock action hay action thật trên sandbox?
+
+## 10. Assumptions
 
 - Team chính thức là **CDO-02**.
 - CDO-02 đã chốt angle **K8s-heavy / Kubernetes Workflow Orchestration**.
-- Sandbox chạy trên AWS/EKS.
+- Sandbox target là AWS/EKS, nhưng mức bắt buộc chạy thật ở T6 cần trainer xác nhận.
 - Region mặc định theo client brief là `us-east-1`, trừ khi trainer/mentor yêu cầu khác.
-- Observability ưu tiên AWS-native: CloudWatch Logs, CloudWatch Metrics, Container Insights; Prometheus/OpenTelemetry/X-Ray là optional nếu kịp.
-- Audit storage ưu tiên S3 Object Lock hoặc append-only storage tương đương.
+- Observability theo contract AI gồm CloudWatch Logs, Prometheus metrics endpoint và OpenTelemetry traces về Jaeger hoặc AWS X-Ray.
+- Audit storage theo contract AI là S3 Object Lock Compliance Mode, retention tối thiểu 90 ngày.
 - CDO-02 có thể dùng mock/skeleton AI endpoint từ T6 W11 đến trước integration session W12.
 
-## 10. Open Questions (cần bàn với AI / trainer)
+## 11. Open Questions (cần bàn với AI / trainer)
 
 Các câu hỏi còn lại cần chốt với AI team hoặc trainer/mentor.
 
-### 10.1 Cần chốt với AI team
+### 11.1 Cần chốt với AI team
 
-1. AI có support 3 build patterns `service_stuck`, `OOMKilled/high_restart_count`, `queue_backlog` không?
-2. AI có đồng ý 2 design-only patterns `bad_deployment_rollout`, `node_pressure` không?
-3. AI đã confirm endpoint `/v1/detect`, `/v1/decide`, `/v1/verify` chưa?
-4. Response của `/v1/decide` có đủ `decision`, `confidence`, `action_plan`, `target`, `rollback_plan`, `verify_plan` không?
-5. AI cần telemetry cụ thể nào cho từng pattern: metrics, logs, Kubernetes events, traces có bắt buộc không?
+1. AI có confirm 3 build patterns: service stuck/latency spike, error rate spike/code-level fault, memory pressure/OOM prevention không?
+2. AI có đồng ý 2 design-only patterns: queue/backpressure và secret/cert/config issue không?
+3. CDO-02 có cần đổi naming pattern để khớp RE2/RE3 và Online Boutique không?
+4. AI có thật sự cần kubeconfig/EKS API permission không, hay chỉ trả `action_plan`?
+5. Offline Simulation Mode sẽ mock action hoàn toàn hay vẫn cần CDO thao tác Kubernetes sandbox?
 6. AI skeleton endpoint khi nào có để CDO test integration?
-7. Nếu AI timeout/503 thì AI có đồng ý rule: CDO không execute, chỉ escalate và audit không?
+7. Với `503`, CDO nên ưu tiên static runbook fallback hay escalation thẳng cho SRE?
 
-### 10.2 Cần chốt với trainer/mentor nếu chưa rõ
+### 11.2 Cần chốt với trainer/mentor nếu chưa rõ
 
 1. Trainer có bắt buộc S3 Object Lock cho audit không, hay append-only log được chấp nhận?
 2. Trainer có yêu cầu region khác `us-east-1` không?
 3. Trainer có yêu cầu base infra T6 phải chạy thật hoàn toàn không, hay skeleton + plan + commit evidence được chấp nhận nếu AWS setup chưa sẵn sàng?
 
-## 11. Pack #1 Completion Checklist
+## 12. Pack #1 Completion Checklist
 
 - [ ] CDO angle locked.
 - [ ] Build/design-only patterns confirmed with AI.
