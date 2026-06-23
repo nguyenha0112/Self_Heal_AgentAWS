@@ -10,7 +10,52 @@ CDO-02 thiết kế platform để Self-Heal Engine chạy an toàn trên Kubern
 
 Angle của CDO-02 là **K8s-heavy / Kubernetes Workflow Orchestration**. Trọng tâm không phải chỉ deploy AI, mà là xây lớp orchestration kiểm soát mọi hành động tự chữa lỗi trên Kubernetes.
 
-## 2. Architecture Diagram
+## 2. Đọc nhanh: hệ thống này chạy như thế nào?
+
+Nói ngắn gọn, CDO-02 xây một "người điều phối" nằm giữa alert, AI và Kubernetes:
+
+```text
+Alert xảy ra
+-> CDO gom logs/metrics/traces
+-> CDO hỏi AI: "đây là lỗi gì?"
+-> CDO hỏi AI: "nên làm action gì?"
+-> CDO kiểm tra action đó có an toàn không
+-> Nếu an toàn thì CDO execute trên Kubernetes
+-> CDO verify lại kết quả
+-> CDO ghi audit
+```
+
+Điểm quan trọng: **AI không tự ý sửa Kubernetes**. AI chỉ trả `action_plan`; CDO executor mới là nơi quyết định có được execute hay không sau khi qua safety gate.
+
+### 2.1 Các thành phần chính, hiểu đơn giản
+
+| Thành phần | Hiểu đơn giản là gì? | Ai phụ trách? |
+|---|---|---|
+| Alert Source / Scenario Injector | Nơi tạo sự cố giả hoặc alert thật | CDO |
+| Telemetry Collector | Bộ gom logs, metrics, traces để gửi AI | CDO |
+| AI Engine | Bộ não phân tích lỗi và đề xuất action | AI team |
+| CDO Self-Heal Executor | Bộ điều phối workflow self-heal | CDO |
+| Safety Gate | Chốt chặn an toàn trước khi execute | CDO |
+| Kubernetes API | Nơi CDO thực hiện restart/scale/patch | CDO dùng |
+| Audit Storage | Nơi ghi lại toàn bộ quá trình xử lý | CDO |
+
+### 2.2 Vì sao không cho AI execute trực tiếp?
+
+Nếu AI gọi Kubernetes trực tiếp, CDO khó đảm bảo:
+
+- AI có thao tác đúng namespace không.
+- AI có vượt blast-radius không.
+- Action có rollback/verify plan không.
+- Có audit đầy đủ trước và sau action không.
+
+Vì vậy CDO-02 chọn boundary:
+
+```text
+AI = decide
+CDO = validate + execute + verify + audit
+```
+
+## 3. Architecture Diagram
 
 ```mermaid
 graph TB
@@ -50,7 +95,7 @@ graph TB
 
 Caption: CDO executor là điểm điều phối chính. AI chỉ đưa ra decision/action plan theo contract. CDO executor enforce safety gate, gọi Kubernetes API khi action được phép, sau đó verify và ghi audit.
 
-## 3. Component Table
+## 4. Component Table
 
 | Component | Service/Technology | Vai trò | Ghi chú |
 |---|---|---|---|
@@ -64,7 +109,7 @@ Caption: CDO executor là điểm điều phối chính. AI chỉ đưa ra decis
 | Metrics | Prometheus-compatible / CloudWatch Metrics | Error rate, latency, memory, restart count | Dùng cho detect/verify |
 | Traces | OpenTelemetry -> X-Ray/Jaeger | Trace lỗi liên service | Theo contract AI, triển khai W12 nếu kịp |
 
-## 4. Main Workflow
+## 5. Main Workflow
 
 ```text
 1. Alert source hoặc scenario injector tạo incident.
@@ -81,7 +126,7 @@ Caption: CDO executor là điểm điều phối chính. AI chỉ đưa ra decis
 12. Nếu regression/fail, rollback hoặc escalate với context bundle.
 ```
 
-## 5. AI Contract Integration
+## 6. AI Contract Integration
 
 CDO-02 consume AI API Contract như sau:
 
@@ -111,7 +156,7 @@ ADJUST_MEMORY_LIMIT
 
 W11 Pack #1 chỉ chốt design và contract alignment. W12 sẽ build executor và test action thật/mock theo mức trainer và AI thống nhất.
 
-## 6. Multi-Tenant Approach
+## 7. Multi-Tenant Approach
 
 CDO-02 dùng namespace-based tenant isolation:
 
@@ -129,7 +174,7 @@ Nguyên tắc:
 - ServiceAccount/RoleBinding tách theo namespace.
 - Audit log ghi `tenant_id`, namespace, action, result, correlation_id.
 
-### 6.1 Tenant Onboarding Flow
+### 7.1 Tenant Onboarding Flow
 
 Trong capstone, CDO-02 chỉ cần tối thiểu 2 tenants để chứng minh isolation. Tenant onboarding dự kiến:
 
@@ -141,14 +186,18 @@ Trong capstone, CDO-02 chỉ cần tối thiểu 2 tenants để chứng minh is
 5. Chạy smoke test: alert -> AI -> safety gate -> deny/execute đúng namespace.
 ```
 
-### 6.2 Noisy Neighbor Mitigation
+### 7.2 Noisy Neighbor Mitigation
 
 - Giới hạn action theo tenant namespace.
 - Không cho một incident scale/restart nhiều deployment cùng lúc nếu vượt blast-radius.
 - Rate limit request theo `X-Tenant-Id` theo AI API contract.
 - Audit mọi action bị deny do cross-tenant hoặc vượt blast-radius.
 
-## 7. Safety Gate
+## 8. Safety Gate
+
+Safety gate là lớp kiểm tra trước khi CDO thực hiện bất kỳ action nào trên Kubernetes. Có thể hiểu đây là "bộ phanh an toàn" của hệ thống self-heal.
+
+Ví dụ: nếu AI trả về "restart deployment tenant-b/api-service" nhưng incident đang thuộc `tenant-a`, safety gate phải chặn ngay và ghi audit.
 
 Safety gate bắt buộc kiểm tra:
 
@@ -163,7 +212,15 @@ Safety gate bắt buộc kiểm tra:
 | AI confidence | Ngưỡng execute cần chốt với AI |
 | Failure fallback | AI 503/timeout -> escalate + audit, không execute mặc định |
 
-## 8. Observability Design
+## 9. Observability Design
+
+Observability là phần giúp AI và CDO hiểu chuyện gì đang xảy ra trong hệ thống. Với TF3, CDO ưu tiên thu thập 3 loại dữ liệu:
+
+- **Metrics:** số liệu như latency, error rate, memory usage.
+- **Logs:** log lỗi từ application.
+- **Traces:** dấu vết request đi qua nhiều service.
+
+AI cần các dữ liệu này để detect/decide/verify. CDO cần các dữ liệu này để chứng minh action đã xử lý lỗi thật hay chưa.
 
 Telemetry theo contract AI:
 
@@ -177,7 +234,7 @@ Telemetry theo contract AI:
 
 W11 Pack #1 sẽ mô tả schema và data source. W12 sẽ collect evidence thật từ sandbox hoặc simulation dataset RE2/RE3 tùy AI/trainer xác nhận.
 
-## 9. Scaling Strategy
+## 10. Scaling Strategy
 
 Scaling trong Pack #1 được thiết kế ở mức khả thi cho W12 demo, không phải production blueprint.
 
@@ -195,7 +252,9 @@ Nguyên tắc scale:
 - Mọi scale action phải có verify plan.
 - Nếu AI confidence thấp hoặc verify signal thiếu, CDO escalate thay vì scale.
 
-## 10. Failure Modes And Recovery
+## 11. Failure Modes And Recovery
+
+Phần này liệt kê các lỗi có thể xảy ra trong quá trình self-heal và cách CDO xử lý. Mục tiêu là khi có lỗi, hệ thống fail-safe: **không execute bừa**, mà deny/escalate/audit.
 
 | Failure | Detection | Recovery |
 |---|---|---|
@@ -206,7 +265,7 @@ Nguyên tắc scale:
 | Verify regression | `/v1/verify` trả regression | Rollback/escalate |
 | Audit writer fail | S3/CloudWatch write error | Stop execution hoặc mark incident unsafe |
 
-## 11. Alternatives Considered
+## 12. Alternatives Considered
 
 | Option | Pros | Cons | Decision |
 |---|---|---|---|
@@ -215,7 +274,7 @@ Nguyên tắc scale:
 | Event-driven hybrid | Có retry/queue tốt | Nhiều moving parts cho W11/W12 | Considered as future enhancement |
 | K8s-heavy workflow orchestration | Sát TF3, kiểm soát K8s action tốt | Phức tạp và cost cao hơn | Accepted |
 
-## 12. Infra Skeleton For W11
+## 13. Infra Skeleton For W11
 
 Terraform/manifests skeleton dự kiến:
 
@@ -236,7 +295,7 @@ manifests/
 
 Mục tiêu T6 W11 là có skeleton/base IaC rõ ràng và commit evidence. Mức chạy thật của VPC/EKS/observability cần xác nhận với trainer nếu AWS account hoặc quota chưa sẵn sàng.
 
-## 13. Open Items
+## 14. Open Items
 
 - Cần AI confirm boundary: AI chỉ trả `action_plan` hay AI cũng execute Kubernetes action.
 - Cần trainer confirm T6 yêu cầu infra chạy thật tới mức nào.

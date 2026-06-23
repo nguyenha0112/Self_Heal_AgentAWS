@@ -17,9 +17,54 @@ Security goals chính:
 - Không để secret/kubeconfig lộ trong repo, log hoặc container image.
 - Ghi đủ evidence để trace một incident theo `correlation_id`.
 
-## 2. Network Security
+## 2. Đọc nhanh: security của CDO-02 bảo vệ cái gì?
 
-### 2.1 Network Layout
+Self-heal là hệ thống tự động sửa lỗi. Điểm rủi ro là nếu tự động sai, nó có thể làm hỏng workload khác. Vì vậy security design của CDO-02 tập trung vào 4 câu hỏi:
+
+```text
+1. Ai được quyền gọi AI?
+2. Ai được quyền thao tác Kubernetes?
+3. Làm sao chặn action sai tenant/sai namespace?
+4. Làm sao chứng minh sau này action nào đã xảy ra?
+```
+
+CDO-02 trả lời bằng 4 lớp bảo vệ:
+
+| Lớp bảo vệ | Dùng để làm gì? |
+|---|---|
+| IAM/Auth | Bảo đảm chỉ service hợp lệ được gọi AI/AWS |
+| Kubernetes RBAC | Giới hạn quyền executor trên Kubernetes |
+| Safety Gate | Chặn action sai tenant, quá blast-radius hoặc thiếu rollback/verify |
+| Audit Log | Ghi lại toàn bộ detect/decide/execute/verify để truy vết |
+
+### 2.1 Ví dụ dễ hiểu
+
+Nếu AI đề xuất:
+
+```text
+Restart deployment tenant-b/api-service
+```
+
+Nhưng incident thật thuộc:
+
+```text
+tenant-a
+```
+
+Thì CDO phải:
+
+```text
+1. Safety gate phát hiện sai tenant.
+2. Không gọi Kubernetes API.
+3. Ghi audit: denied_cross_tenant.
+4. Escalate nếu cần.
+```
+
+Đây là lý do CDO-02 không để AI tự execute trực tiếp.
+
+## 3. Network Security
+
+### 3.1 Network Layout
 
 ```mermaid
 graph TB
@@ -44,7 +89,7 @@ graph TB
     EXEC --> SM
 ```
 
-### 2.2 Network Rules
+### 3.2 Network Rules
 
 - AI endpoint là internal endpoint, không public Internet.
 - CDO executor gọi AI qua HTTPS và IAM SigV4.
@@ -52,7 +97,9 @@ graph TB
 - Audit/log traffic đi tới CloudWatch và S3.
 - Nếu cần NAT/VPC endpoints, ưu tiên VPC endpoints cho S3, CloudWatch, Secrets Manager để giảm public exposure.
 
-## 3. IAM And Authentication
+## 4. IAM And Authentication
+
+IAM/Auth trả lời câu hỏi: service nào được gọi service nào. Với contract AI hiện tại, CDO executor gọi AI bằng IAM SigV4 và tenant ID `cdo-2`.
 
 | Identity | Used by | Permissions |
 |---|---|---|
@@ -63,7 +110,9 @@ graph TB
 
 CDO-02 cần làm rõ với AI một điểm quan trọng: deployment contract AI có nhắc AI có thể fetch kubeconfig/gọi EKS API. Nếu CDO-02 giữ boundary "AI only decide, CDO executor execute", thì AI role không nên có quyền mutate Kubernetes.
 
-## 4. Kubernetes RBAC
+## 5. Kubernetes RBAC
+
+RBAC là lớp giới hạn quyền trong Kubernetes. Mục tiêu là executor chỉ có quyền vừa đủ để làm demo self-heal, không có quyền nguy hiểm như delete namespace hoặc sửa cluster-wide resource.
 
 CDO-02 dùng namespace-based RBAC:
 
@@ -89,7 +138,9 @@ patch/update: deployments scale/restart target
 create: events hoặc configmap audit marker nếu cần
 ```
 
-## 5. Tenant Isolation
+## 6. Tenant Isolation
+
+Tenant isolation bảo đảm tenant này không bị action nhầm sang tenant khác. Đây là hard requirement của TF3.
 
 Tenant isolation được enforce ở 3 lớp:
 
@@ -103,7 +154,9 @@ Nếu AI trả action target `tenant-b` cho incident của `tenant-a`, CDO execu
 deny action -> không gọi Kubernetes API -> ghi audit denied_cross_tenant -> escalate nếu cần
 ```
 
-## 6. Secrets Management
+## 7. Secrets Management
+
+Secrets management bảo đảm token, signing key, kube access và AWS credential không bị lộ.
 
 Secrets dự kiến:
 
@@ -121,7 +174,9 @@ Controls:
 - Redact PII và credential-like strings trong logs.
 - Ưu tiên IRSA thay vì static AWS keys trong pod.
 
-## 7. Audit Logging
+## 8. Audit Logging
+
+Audit là phần giúp trainer/client kiểm tra: incident nào xảy ra, AI đã quyết định gì, CDO có execute không, kết quả ra sao. Không có audit thì self-heal rất khó được tin tưởng.
 
 Audit là hard requirement của TF3. CDO-02 thiết kế audit theo `correlation_id` để truy vết toàn bộ incident.
 
@@ -157,7 +212,7 @@ Audit record tối thiểu:
 
 Storage target theo contract AI: **S3 Object Lock Compliance Mode**, retention tối thiểu 90 ngày.
 
-## 8. Data Protection
+## 9. Data Protection
 
 - Logs gửi sang AI phải lọc/mã hóa PII nếu có.
 - Telemetry payload chỉ nên chứa fields trong telemetry contract.
@@ -165,7 +220,9 @@ Storage target theo contract AI: **S3 Object Lock Compliance Mode**, retention t
 - Encryption at rest dùng S3 SSE-KMS nếu có thể.
 - Encryption in transit dùng HTTPS/TLS.
 
-## 9. Failure And Abuse Cases
+## 10. Failure And Abuse Cases
+
+Phần này liệt kê các tình huống nguy hiểm và control tương ứng. Mục tiêu chung là fail-safe: khi không chắc thì không execute.
 
 | Case | Control |
 |---|---|
@@ -177,7 +234,7 @@ Storage target theo contract AI: **S3 Object Lock Compliance Mode**, retention t
 | Executor bị lỗi giữa action | Verify/rollback/escalate theo trạng thái audit |
 | Secret bị lộ trong log | Redaction + không log sensitive headers |
 
-## 10. Open Questions
+## 11. Open Questions
 
 - AI có thật sự cần kubeconfig/EKS API permission không?
 - Nếu AI giữ kubeconfig, boundary RBAC giữa AI và CDO executor là gì?
