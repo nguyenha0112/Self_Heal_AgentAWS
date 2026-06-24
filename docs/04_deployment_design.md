@@ -215,7 +215,7 @@ CDO-02 cần tách rõ hai loại rollback:
 
 **Rollback self-heal runtime action**
 
-- Tương ứng với `rollback_plan` đi kèm trong `action_plan` AI trả về.
+- Tương ứng với local rollback/runbook path của CDO và `verify_policy` AI trả về trong `/v1/decide`.
 - Ví dụ: rollout undo sau restart/patch nếu verify fail.
 - Nếu rollback không an toàn hoặc không đủ điều kiện, hệ thống phải escalate thay vì thử mutate thêm.
 

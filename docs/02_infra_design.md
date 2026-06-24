@@ -45,7 +45,7 @@ Nếu AI gọi Kubernetes trực tiếp, CDO khó đảm bảo:
 
 - AI có thao tác đúng namespace không.
 - AI có vượt blast-radius không.
-- Action có rollback/verify plan không.
+- Action có local rollback/runbook path và `verify_policy` không.
 - Có audit đầy đủ trước và sau action không.
 
 Vì vậy CDO-02 chọn boundary:
@@ -69,7 +69,7 @@ flowchart LR
             EKS[EKS / Kubernetes Sandbox]
             OBS[Observability Stack<br/>CloudWatch + Prometheus + OTel]
             COLLECTOR[Telemetry Collector]
-            SQS[SQS Telemetry Queue]
+            BUFFER[Optional Telemetry Buffer<br/>SQS if CDO owns it]
             EXEC[CDO Self-Heal Executor]
             SAFETY[Safety Gate]
             K8S[Kubernetes API]
@@ -85,8 +85,8 @@ flowchart LR
     ALERT --> OBS
     EKS -->|logs / metrics / traces| OBS
     OBS -->|telemetry| COLLECTOR
-    COLLECTOR --> SQS
-    SQS --> EXEC
+    COLLECTOR --> BUFFER
+    BUFFER --> EXEC
     EXEC <-->|detect / decide / verify| AI
     EXEC --> SAFETY
     SAFETY -->|pass| K8S
@@ -104,9 +104,9 @@ Caption: CDO executor là điểm điều phối chính. AI chỉ đưa ra decis
 | Kubernetes sandbox | EKS/Kubernetes | Chạy sample workloads và namespaces tenant | Target chính của self-heal |
 | CDO Self-Heal Executor | Pod/Deployment trong EKS | Điều phối detect -> decide -> safety -> execute -> verify | CDO own |
 | Telemetry Collector | CloudWatch/Container Insights/Prometheus/OpenTelemetry | Thu logs, metrics, traces theo contract AI | CDO chuẩn hóa data trước khi gọi AI |
-| Telemetry Queue | Amazon SQS | Buffer telemetry đã chuẩn hóa từ RE2/RE3 preprocessor hoặc runtime collector | Khớp emit point trong telemetry contract AI |
+| Optional Telemetry Buffer | Amazon SQS if CDO owns it | Buffer telemetry đã chuẩn hóa từ RE2/RE3 preprocessor hoặc runtime collector | Optional internal CDO design; AI contract mới chưa cung cấp SQS ARN |
 | AI Engine | ECS Fargate internal endpoint | Decision service do AI team own | Endpoint `https://ai-engine.tf-3.internal/` |
-| Safety Gate | Module trong executor | Validate tenant, namespace, confidence, blast-radius, rollback, verify | Chặn unsafe action |
+| Safety Gate | Module trong executor | Validate tenant, namespace, confidence threshold, action allow-list, `allowed_namespaces`, blast-radius, `verify_policy` | Chặn unsafe action |
 | Idempotency Lock | DynamoDB conditional write | Chống execute trùng cùng `Idempotency-Key` | Khớp deployment contract AI |
 | Audit Storage | S3 Object Lock | Ghi audit tamper-evident, retention >=90 ngày | Theo contract AI |
 | Logs | CloudWatch Logs | Logs executor, AI request/response, safety decision | Query theo `correlation_id` |
@@ -118,11 +118,11 @@ Caption: CDO executor là điểm điều phối chính. AI chỉ đưa ra decis
 ```text
 1. Alert source hoặc scenario injector tạo incident.
 2. Telemetry collector/preprocessor gom metrics/logs/traces theo telemetry contract.
-3. Với RE2/RE3 Offline Simulation Mode, preprocessor đọc `metrics.csv`, `logs.csv`, `traces.csv`, inject `tenant_id`, chuẩn hóa signal và emit qua SQS.
+3. Với RE2/RE3 Offline Simulation Mode, preprocessor đọc `metrics.csv`, `logs.csv`, `traces.csv`, inject `tenant_id`, chuẩn hóa signal rồi đưa vào executor. SQS chỉ dùng như buffer nội bộ nếu CDO chọn.
 4. CDO executor gọi AI /v1/detect.
 5. Nếu AI phát hiện anomaly, executor gọi /v1/decide.
 6. AI trả action_plan[].
-7. Safety gate validate tenant, namespace, blast-radius, rollback plan, verify plan.
+7. Safety gate validate tenant, namespace, `allowed_namespaces`, blast-radius, local rollback/runbook path, `verify_policy`.
 8. Nếu pass, executor chạy dry-run hoặc mock execute theo Offline Simulation Mode.
 9. Executor ghi nhận action result.
 10. Executor thu post-action telemetry hoặc đọc post_telemetry_window từ dataset.
@@ -138,14 +138,14 @@ CDO-02 consume AI API Contract như sau:
 | API | CDO usage |
 |---|---|
 | `POST /v1/detect` | Gửi telemetry/context để AI xác định anomaly |
-| `POST /v1/decide` | Nhận `action_plan[]`, `blast_radius_config`, confidence |
+| `POST /v1/decide` | Nhận `pattern_type`, `action_plan[]`, `blast_radius_config`, `verify_policy` |
 | `POST /v1/verify` | Gửi post-action metrics để AI xác định success/regression |
 
 Headers/auth theo contract:
 
 ```text
 Authorization: IAM SigV4
-X-Tenant-Id: cdo-2
+X-Tenant-Id: 6c8b4b2b-4d45-4209-a1b4-4b532d56a31c
 Idempotency-Key: UUID v4
 X-Correlation-Id: incident correlation id
 ```
@@ -154,9 +154,11 @@ Các action CDO sẽ hỗ trợ theo allow-list:
 
 ```text
 RESTART_DEPLOYMENT
-SCALE_UP_PODS
-UPDATE_ENV_SECRET
-ADJUST_MEMORY_LIMIT
+PATCH_MEMORY_LIMIT
+SCALE_REPLICAS
+ROLLOUT_UNDO
+ROTATE_SECRET
+DELETE_POD
 ```
 
 W11 Pack #1 chỉ chốt design và contract alignment. Theo AI API Contract, RE2/RE3 Offline Simulation Mode chạy ở dạng **Mock Mode**: CDO ghi nhận action giả định đã thực hiện, rồi gửi `post_telemetry_window` từ dataset sang `/v1/verify`. Nếu trainer yêu cầu, CDO-02 sẽ bổ sung demo action thật trên Kubernetes sandbox ở W12.
@@ -231,13 +233,13 @@ Telemetry theo contract AI:
 
 | Signal | Source dự kiến |
 |---|---|
-| `istio_request_error_rate` | Prometheus/Istio metrics hoặc mock metric source |
-| `istio_request_latency_p95` | Prometheus histogram / CloudWatch metric |
-| `container_memory_working_set_bytes` | Container Insights / Prometheus |
-| `app_log_error_event` | CloudWatch Logs parser |
-| `trace_span_error_event` | OpenTelemetry/X-Ray/Jaeger |
+| `service_error_rate` | Prometheus/Istio metrics hoặc mock metric source |
+| `service_latency_p95` | Prometheus histogram / CloudWatch metric |
+| `container_resource_usage` | Container Insights / Prometheus |
+| `application_log_event` | CloudWatch Logs parser with PII/secret scrubbing |
+| `distributed_trace_error_event` | OpenTelemetry/X-Ray/Jaeger |
 
-Với Offline Simulation Mode, nguồn chính là `metrics.csv`, `logs.csv`, `traces.csv` từ RE2/RE3; CDO preprocessor tính toán signal phái sinh, inject `tenant_id` và emit qua SQS. W12 sẽ collect evidence từ simulation dataset, và có thể bổ sung sandbox telemetry nếu trainer yêu cầu action thật.
+Với Offline Simulation Mode, nguồn chính là `metrics.csv`, `logs.csv`, `traces.csv` từ RE2/RE3; CDO preprocessor tính toán signal phái sinh, inject tenant UUID, rồi đưa vào executor/AI API path. Nếu dùng SQS, đây là buffer nội bộ của CDO chứ chưa phải integration contract với AI.
 
 ## 10. Scaling Strategy
 
@@ -247,7 +249,7 @@ Scaling trong Pack #1 được thiết kế ở mức khả thi cho W12 demo, kh
 |---|---|---|
 | CDO executor | Kubernetes Deployment replicas | CPU, request count, queue length nếu có |
 | Telemetry collector | Scale theo log/metric volume | CloudWatch/Prometheus scrape load |
-| Telemetry queue | SQS buffer | Queue depth / age of oldest message |
+| Optional telemetry buffer | SQS buffer if enabled | Queue depth / age of oldest message |
 | AI Engine | Theo deployment contract của AI trên ECS Fargate | CPU, memory, request latency |
 | Workload target | Theo AI action plan và safety gate | Queue backlog, latency/error rate |
 
@@ -255,7 +257,7 @@ Nguyên tắc scale:
 
 - Scale action phải nằm trong allow-list và blast-radius.
 - Không scale cross-tenant.
-- Mọi scale action phải có verify plan.
+- Mọi scale action phải có `verify_policy`.
 - Nếu AI confidence thấp hoặc verify signal thiếu, CDO escalate thay vì scale.
 
 ## 11. Failure Modes And Recovery
@@ -265,7 +267,7 @@ Phần này liệt kê các lỗi có thể xảy ra trong quá trình self-heal
 | Failure | Detection | Recovery |
 |---|---|---|
 | AI endpoint timeout/503 | HTTP client timeout/error | Không execute, escalate + audit |
-| AI response thiếu rollback/verify plan | Schema validation fail | Deny action, audit reason |
+| AI response thiếu `verify_policy` hoặc namespace/action invalid | Schema/safety validation fail | Deny action, audit reason |
 | Cross-tenant target | Safety gate detect namespace mismatch | Deny action, audit `denied_cross_tenant` |
 | Kubernetes action fail | kubectl/API error | Rollback nếu safe, nếu không escalate |
 | Verify regression | `/v1/verify` trả regression | Rollback/escalate |

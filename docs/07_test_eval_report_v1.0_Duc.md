@@ -26,7 +26,7 @@ Boundary dùng cho toàn bộ test:
 | Test type | Tool / Method | Phạm vi | Trạng thái |
 |---|---|---|---|
 | Contract test | JSON schema + signed AI contract | Validate request/response cho `/v1/detect`, `/v1/decide`, `/v1/verify` | Planned |
-| Safety unit test | pytest hoặc module test tương đương | Validate allow-list, tenant match, blast-radius, rollback plan, verify plan, idempotency | Planned |
+| Safety unit test | pytest hoặc module test tương đương | Validate allow-list, tenant match, blast-radius, local rollback/runbook path, `verify_policy`, idempotency | Planned |
 | Integration test | Mock AI endpoint + CDO executor | Alert payload -> AI decision -> safety decision -> audit record | Planned |
 | Kubernetes action test | EKS/Kubernetes sandbox + server-side dry-run | Restart deployment, scale worker, deny unsafe namespace/action | Planned |
 | E2E scenario test | Scenario injector + Prometheus/Alertmanager hoặc offline RE2/RE3 preprocessor | >= 10 injected scenarios trong >= 4h simulation window | Planned |
@@ -73,12 +73,12 @@ Nếu có SLO miss sau khi chạy test, điền bảng này để giải thích 
 
 | ID | Scenario | Tenant | Signal source | Expected AI decision | Expected CDO action | Expected result |
 |---|---|---|---|---|---|---|
-| TC-01 | Service stuck / latency spike | `tenant-a` | `istio_request_latency_p95` | `service_stuck` | `RESTART_DEPLOYMENT` sau khi safety pass | Auto-resolved |
-| TC-02 | Service stuck / latency spike | `tenant-b` | `istio_request_latency_p95` | `service_stuck` | `RESTART_DEPLOYMENT` sau khi safety pass | Auto-resolved |
-| TC-03 | Error rate spike | `tenant-a` | `istio_request_error_rate`, app logs | `error_rate_spike` | Restart nếu confidence/safety pass, nếu không thì escalate | Auto-resolved hoặc escalated safely |
-| TC-04 | Memory pressure / OOM prevention | `tenant-a` | `container_memory_working_set_bytes` | `memory_pressure` | `ADJUST_MEMORY_LIMIT` chỉ khi có rollback/verify plan | Auto-resolved hoặc denied safely |
-| TC-05 | Queue/backpressure | `tenant-b` | queue depth hoặc synthetic backlog metric | `queue_backlog` | `SCALE_UP_PODS` trong giới hạn blast-radius | Auto-resolved |
-| TC-06 | Cert/secret/config issue | `tenant-a` | app logs / synthetic alert | `config_issue` | `UPDATE_ENV_SECRET` bị deny nếu chưa được allow rõ | Escalated safely |
+| TC-01 | Service stuck / latency spike | `tenant-a` | `service_latency_p95` | `service_stuck` | `RESTART_DEPLOYMENT` sau khi safety pass | Auto-resolved |
+| TC-02 | Service stuck / latency spike | `tenant-b` | `service_latency_p95` | `service_stuck` | `RESTART_DEPLOYMENT` sau khi safety pass | Auto-resolved |
+| TC-03 | Error rate spike | `tenant-a` | `service_error_rate`, app logs | `error_rate_spike` | Restart nếu confidence/safety pass, nếu không thì escalate | Auto-resolved hoặc escalated safely |
+| TC-04 | Memory pressure / OOM prevention | `tenant-a` | `container_resource_usage` | `memory_pressure` | `PATCH_MEMORY_LIMIT` chỉ khi có verify_policy và local rollback/runbook path | Auto-resolved hoặc denied safely |
+| TC-05 | Queue/backpressure | `tenant-b` | queue depth hoặc synthetic backlog metric | `queue_backlog` | `SCALE_REPLICAS` trong giới hạn blast-radius | Auto-resolved |
+| TC-06 | Cert/secret/config issue | `tenant-a` | app logs / synthetic alert | `config_issue` | `ROTATE_SECRET` bị deny nếu chưa được allow rõ | Escalated safely |
 
 ### 5.2 Safety And Failure Scenarios
 
@@ -86,8 +86,9 @@ Nếu có SLO miss sau khi chạy test, điền bảng này để giải thích 
 |---|---|---|---|---|
 | TC-07 | Cross-tenant target | Incident tenant là `tenant-a`, AI action target `tenant-b` | Deny action | Không có Kubernetes mutation, audit reason `denied_cross_tenant` |
 | TC-08 | Action ngoài allow-list | AI trả `DELETE_NAMESPACE` | Deny action | Không có Kubernetes mutation, audit reason `denied_action_not_allowed` |
-| TC-09 | Thiếu rollback plan | Mutating action không có rollback plan | Deny action | Audit ghi `missing_rollback_plan` |
-| TC-10 | Thiếu verify plan | Mutating action không có metric/log verify step | Deny action | Audit ghi `missing_verify_plan` |
+| TC-08b | Risky contract action | AI trả `DELETE_POD` | Deny hoặc require manual approval pending AI policy | Không có Kubernetes mutation tự động |
+| TC-09 | Thiếu local rollback/runbook path | Mutating action không có fallback path cục bộ | Deny action | Audit ghi `missing_rollback_path` |
+| TC-10 | Thiếu `verify_policy` | Mutating action không có `verify_policy.window_seconds` | Deny action | Audit ghi `missing_verify_policy` |
 | TC-11 | Duplicate idempotency key | Retry cùng action với cùng `Idempotency-Key` | Deny duplicate execute | Chỉ có 1 execute event cho key đó |
 | TC-12 | AI timeout/503 | `/v1/decide` timeout hoặc trả 503 | Escalate, không execute | Audit ghi `ai_unavailable_escalated` |
 | TC-13 | Dry-run failure | Kubernetes server-side dry-run fail | Deny execute | Không có real action sau dry-run fail |
@@ -110,10 +111,10 @@ Nếu có SLO miss sau khi chạy test, điền bảng này để giải thích 
 **Steps:**
 
 1. Inject alert với `correlation_id=tc-01-*`, tenant `tenant-a`, namespace `tenant-a`.
-2. Cung cấp telemetry cho thấy `istio_request_latency_p95` cao bất thường.
+2. Cung cấp telemetry cho thấy `service_latency_p95` cao bất thường.
 3. CDO gọi `/v1/detect` và `/v1/decide`.
-4. AI trả `RESTART_DEPLOYMENT` cho một deployment, có rollback plan và verify plan.
-5. Safety gate validate tenant, allow-list, blast-radius, rollback, verify và idempotency.
+4. AI trả `RESTART_DEPLOYMENT` cho một deployment, có `verify_policy`; CDO có local rollback/runbook path.
+5. Safety gate validate tenant, allow-list, blast-radius, rollback/runbook path, `verify_policy` và idempotency.
 6. CDO chạy server-side dry-run.
 7. CDO execute hoặc mock-execute restart.
 8. CDO gọi `/v1/verify`.
@@ -156,7 +157,7 @@ Nếu có SLO miss sau khi chạy test, điền bảng này để giải thích 
 3. Cung cấp post-action telemetry cho thấy regression.
 4. CDO gọi `/v1/verify`.
 
-**Expected result:** CDO chạy rollback nếu rollback plan an toàn; nếu không thì escalate. Audit có `verify_regression` và `rollback_done` hoặc `escalated`.
+**Expected result:** CDO chạy rollback nếu local rollback/runbook path an toàn; nếu không thì escalate. Audit có `verify_regression` và `rollback_done` hoặc `escalated`.
 
 ## 7. Scenario Simulation Plan
 
@@ -187,7 +188,7 @@ Planned load profile:
 
 - Ramp-up: 0 -> 100 simulated alert/API events mỗi phút trong 5 phút.
 - Sustained: 100 events mỗi phút trong 10 phút.
-- Tenants simulated: `tenant-a`, `tenant-b`, thêm optional `tnt-re2-simulation` và `tnt-re3-simulation`.
+- Tenants simulated: namespaces `tenant-a`, `tenant-b`; request header uses CDO-02 tenant UUID `6c8b4b2b-4d45-4209-a1b4-4b532d56a31c` pending AI confirmation.
 - Tool: k6, Locust hoặc scenario replay runner.
 
 ### 8.2 Results

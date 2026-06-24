@@ -79,8 +79,9 @@ AI trả về:
 ```json
 {
   "anomaly_detected": true,
-  "severity": "high",
+  "severity": 0.85,
   "confidence": 0.91,
+  "reasoning": "service_latency_p95 cao bất thường trong cửa sổ gần nhất",
   "correlation_id": "inc-001"
 }
 ```
@@ -104,25 +105,27 @@ AI trả về action plan:
 ```json
 {
   "matched_runbook": "service_stuck",
+  "pattern_type": "urgent",
   "action_plan": [
     {
-      "action_type": "RESTART_DEPLOYMENT",
-      "target": {
+      "step": 1,
+      "action": "RESTART_DEPLOYMENT",
+      "target": "deployment/api-service",
+      "params": {
         "namespace": "tenant-a",
-        "deployment": "api-service"
-      },
-      "blast_radius_config": {
-        "max_deployments": 1
-      },
-      "rollback_plan": {
-        "type": "rollout_undo"
-      },
-      "verify_plan": {
-        "metrics": ["latency_p95", "error_rate"],
-        "window_seconds": 180
+        "grace_period_seconds": 30
       }
     }
-  ]
+  ],
+  "blast_radius_config": {
+    "max_pod_impact_pct": 25,
+    "circuit_breaker_error_rate": 0.2,
+    "allowed_namespaces": ["tenant-a"]
+  },
+  "verify_policy": {
+    "window_seconds": 180,
+    "success_conditions": ["pod_ready == true", "service_latency_p95 < threshold"]
+  }
 }
 ```
 
@@ -134,8 +137,8 @@ CDO không execute ngay. CDO kiểm tra:
 tenant_id có khớp namespace không?
 action có nằm trong allow-list không?
 blast-radius có vượt giới hạn không?
-có rollback_plan không?
-có verify_plan không?
+namespace có nằm trong allowed_namespaces không?
+có verify_policy không?
 Idempotency-Key có bị trùng không?
 AI confidence có đủ không?
 ```
@@ -259,7 +262,7 @@ timestamp
 | Tình huống | CDO xử lý |
 |---|---|
 | AI timeout hoặc 503 | Không execute, escalate + audit |
-| AI trả action thiếu rollback_plan | Deny action + audit |
+| AI trả action thiếu verify_policy hoặc namespace không allowed | Deny action + audit |
 | AI trả namespace sai tenant | Deny cross-tenant + audit |
 | Dry-run fail | Không execute thật, escalate |
 | Execute fail | Rollback nếu safe, nếu không escalate |

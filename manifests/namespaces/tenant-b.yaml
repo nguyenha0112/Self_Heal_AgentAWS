@@ -4,3 +4,5 @@ metadata:
   name: tenant-b
   labels:
     tenant_id: tenant-b
+  annotations:
+    selfheal.ai/cdo-tenant-id: "6c8b4b2b-4d45-4209-a1b4-4b532d56a31c"

@@ -99,17 +99,17 @@ graph TB
 
 ## 4. IAM And Authentication
 
-IAM/Auth trả lời câu hỏi: service nào được gọi service nào. Với contract AI hiện tại, CDO executor gọi AI bằng IAM SigV4 và tenant ID `cdo-2`.
+IAM/Auth trả lời câu hỏi: service nào được gọi service nào. Với contract AI hiện tại, CDO executor gọi AI bằng IAM SigV4 và tenant UUID `6c8b4b2b-4d45-4209-a1b4-4b532d56a31c` pending AI confirmation.
 
 | Identity | Used by | Permissions |
 |---|---|---|
 | CDO executor AWS role | Executor pod/task | Gọi AI endpoint với IAM SigV4, ghi audit S3, ghi logs |
-| CDO telemetry preprocessor role | Preprocessor/collector | Đọc telemetry source, ghi SQS telemetry queue nếu dùng Offline Simulation Mode |
+| CDO telemetry preprocessor role | Preprocessor/collector | Đọc telemetry source, scrub PII/secret, validate schema, optionally ghi SQS buffer nếu CDO dùng Offline Simulation Mode |
 | AI service role | AI ECS Fargate | Theo deployment contract của AI |
 | Deploy role | Terraform/CI | Tạo VPC/EKS/IAM/S3/observability theo scope |
 | Readonly reviewer role | Mentor/trainer review | Read-only logs, audit, infra describe |
 
-CDO-02 cần làm rõ với AI một điểm quan trọng: deployment contract AI có nhắc AI có thể fetch kubeconfig/gọi EKS API. Nếu CDO-02 giữ boundary "AI only decide, CDO executor execute", thì AI role không nên có quyền mutate Kubernetes.
+Deployment contract mới đã align boundary: AI only decides, CDO executor executes. AI role không giữ kubeconfig và không có quyền mutate Kubernetes/EKS API; CDO-02 giữ Kubernetes RBAC và audit boundary.
 
 ## 5. Kubernetes RBAC
 
@@ -235,15 +235,15 @@ Phần này liệt kê các tình huống nguy hiểm và control tương ứng.
 | AI trả namespace sai tenant | Safety gate deny + RBAC deny |
 | AI timeout/503 | No execute, escalate + audit |
 | Idempotency key trùng | Không execute trùng |
-| SQS telemetry message sai schema | Reject message, log validation error, không gọi AI |
+| Telemetry message sai schema | Reject message, log validation error/DLQ nếu bật buffer, không gọi AI |
 | Audit write fail | Stop action hoặc mark incident unsafe |
 | Executor bị lỗi giữa action | Verify/rollback/escalate theo trạng thái audit |
 | Secret bị lộ trong log | Redaction + không log sensitive headers |
 
 ## 11. Open Questions
 
-- AI có thật sự cần kubeconfig/EKS API permission không?
-- Nếu AI giữ kubeconfig, boundary RBAC giữa AI và CDO executor là gì?
+- Confirm tenant UUID chính thức của CDO-02 với AI.
+- Confirm confidence threshold, `DELETE_POD` policy, `suspected_fault_type` enum và SQS ownership nếu còn dùng.
 - Trainer có bắt buộc S3 Object Lock thật cho W11/T6 không, hay W12 mới cần evidence?
 - Traces có bắt buộc phải triển khai đầy đủ trong W12 demo không?
 - Offline Simulation Mode đã là Mock Mode theo AI contract; trainer có cần thêm bằng chứng action thật trên Kubernetes sandbox không?
