@@ -58,41 +58,41 @@ CDO = validate + execute + verify + audit
 ## 3. Architecture Diagram
 
 ```mermaid
-graph TB
+flowchart LR
+    ALERT[Alert Source / Scenario Injector]
+
     subgraph "AWS VPC - us-east-1"
+        direction LR
+
         subgraph "Private Subnets"
+            direction TB
             EKS[EKS / Kubernetes Sandbox]
-            EXEC[CDO Self-Heal Executor]
+            OBS[Observability Stack<br/>CloudWatch + Prometheus + OTel]
             COLLECTOR[Telemetry Collector]
             SQS[SQS Telemetry Queue]
-            AI[AI Engine - ECS Fargate Internal Endpoint]
+            EXEC[CDO Self-Heal Executor]
+            SAFETY[Safety Gate]
+            K8S[Kubernetes API]
         end
 
-        subgraph "Observability"
-            CW[CloudWatch Logs]
-            PROM[Prometheus-compatible Metrics]
-            OTEL[OpenTelemetry / X-Ray]
-        end
+        AI[AI Engine<br/>ECS Fargate Internal Endpoint]
 
         subgraph "Audit"
             S3[S3 Object Lock Audit Bucket]
         end
     end
 
-    ALERT[Alert Source / Scenario Injector] --> COLLECTOR
-    COLLECTOR -->|normalized metrics/logs/traces| SQS
+    ALERT --> OBS
+    EKS -->|logs / metrics / traces| OBS
+    OBS -->|telemetry| COLLECTOR
+    COLLECTOR --> SQS
     SQS --> EXEC
-    EXEC -->|POST /v1/detect| AI
-    EXEC -->|POST /v1/decide| AI
-    EXEC --> SAFETY[Safety Gate]
-    SAFETY -->|dry-run pass| K8S[Kubernetes API]
+    EXEC <-->|detect / decide / verify| AI
+    EXEC --> SAFETY
+    SAFETY -->|pass| K8S
     K8S --> EKS
-    EXEC -->|POST /v1/verify| AI
-    EXEC --> CW
-    EXEC --> PROM
-    EXEC --> OTEL
-    EXEC --> S3
-    SAFETY -->|deny/escalate| S3
+    EXEC -->|audit| S3
+    SAFETY -->|deny / escalate| S3
 ```
 
 Caption: CDO executor là điểm điều phối chính. AI chỉ đưa ra decision/action plan theo contract. CDO executor enforce safety gate, gọi Kubernetes API khi action được phép, sau đó verify và ghi audit.
