@@ -64,6 +64,7 @@ graph TB
             EKS[EKS / Kubernetes Sandbox]
             EXEC[CDO Self-Heal Executor]
             COLLECTOR[Telemetry Collector]
+            SQS[SQS Telemetry Queue]
             AI[AI Engine - ECS Fargate Internal Endpoint]
         end
 
@@ -79,7 +80,8 @@ graph TB
     end
 
     ALERT[Alert Source / Scenario Injector] --> COLLECTOR
-    COLLECTOR -->|metrics/logs/traces| EXEC
+    COLLECTOR -->|normalized metrics/logs/traces| SQS
+    SQS --> EXEC
     EXEC -->|POST /v1/detect| AI
     EXEC -->|POST /v1/decide| AI
     EXEC --> SAFETY[Safety Gate]
@@ -102,8 +104,10 @@ Caption: CDO executor là điểm điều phối chính. AI chỉ đưa ra decis
 | Kubernetes sandbox | EKS/Kubernetes | Chạy sample workloads và namespaces tenant | Target chính của self-heal |
 | CDO Self-Heal Executor | Pod/Deployment trong EKS | Điều phối detect -> decide -> safety -> execute -> verify | CDO own |
 | Telemetry Collector | CloudWatch/Container Insights/Prometheus/OpenTelemetry | Thu logs, metrics, traces theo contract AI | CDO chuẩn hóa data trước khi gọi AI |
+| Telemetry Queue | Amazon SQS | Buffer telemetry đã chuẩn hóa từ RE2/RE3 preprocessor hoặc runtime collector | Khớp emit point trong telemetry contract AI |
 | AI Engine | ECS Fargate internal endpoint | Decision service do AI team own | Endpoint `https://ai-engine.tf-3.internal/` |
 | Safety Gate | Module trong executor | Validate tenant, namespace, confidence, blast-radius, rollback, verify | Chặn unsafe action |
+| Idempotency Lock | DynamoDB conditional write | Chống execute trùng cùng `Idempotency-Key` | Khớp deployment contract AI |
 | Audit Storage | S3 Object Lock | Ghi audit tamper-evident, retention >=90 ngày | Theo contract AI |
 | Logs | CloudWatch Logs | Logs executor, AI request/response, safety decision | Query theo `correlation_id` |
 | Metrics | Prometheus-compatible / CloudWatch Metrics | Error rate, latency, memory, restart count | Dùng cho detect/verify |
@@ -113,17 +117,18 @@ Caption: CDO executor là điểm điều phối chính. AI chỉ đưa ra decis
 
 ```text
 1. Alert source hoặc scenario injector tạo incident.
-2. Telemetry collector gom metrics/logs/traces theo telemetry contract.
-3. CDO executor gọi AI /v1/detect.
-4. Nếu AI phát hiện anomaly, executor gọi /v1/decide.
-5. AI trả action_plan[].
-6. Safety gate validate tenant, namespace, blast-radius, rollback plan, verify plan.
-7. Nếu pass, executor chạy dry-run.
-8. Nếu dry-run pass, executor execute action trên Kubernetes.
-9. Executor thu post-action telemetry.
-10. Executor gọi AI /v1/verify.
-11. Nếu success, close incident và ghi audit.
-12. Nếu regression/fail, rollback hoặc escalate với context bundle.
+2. Telemetry collector/preprocessor gom metrics/logs/traces theo telemetry contract.
+3. Với RE2/RE3 Offline Simulation Mode, preprocessor đọc `metrics.csv`, `logs.csv`, `traces.csv`, inject `tenant_id`, chuẩn hóa signal và emit qua SQS.
+4. CDO executor gọi AI /v1/detect.
+5. Nếu AI phát hiện anomaly, executor gọi /v1/decide.
+6. AI trả action_plan[].
+7. Safety gate validate tenant, namespace, blast-radius, rollback plan, verify plan.
+8. Nếu pass, executor chạy dry-run hoặc mock execute theo Offline Simulation Mode.
+9. Executor ghi nhận action result.
+10. Executor thu post-action telemetry hoặc đọc post_telemetry_window từ dataset.
+11. Executor gọi AI /v1/verify.
+12. Nếu success, close incident và ghi audit.
+13. Nếu regression/fail, rollback hoặc escalate với context bundle.
 ```
 
 ## 6. AI Contract Integration
@@ -154,7 +159,7 @@ UPDATE_ENV_SECRET
 ADJUST_MEMORY_LIMIT
 ```
 
-W11 Pack #1 chỉ chốt design và contract alignment. W12 sẽ build executor và test action thật/mock theo mức trainer và AI thống nhất.
+W11 Pack #1 chỉ chốt design và contract alignment. Theo AI API Contract, RE2/RE3 Offline Simulation Mode chạy ở dạng **Mock Mode**: CDO ghi nhận action giả định đã thực hiện, rồi gửi `post_telemetry_window` từ dataset sang `/v1/verify`. Nếu trainer yêu cầu, CDO-02 sẽ bổ sung demo action thật trên Kubernetes sandbox ở W12.
 
 ## 7. Multi-Tenant Approach
 
@@ -208,7 +213,7 @@ Safety gate bắt buộc kiểm tra:
 | Blast-radius | Không vượt số deployment/replica giới hạn |
 | Rollback plan | Bắt buộc có với action mutate |
 | Verify plan | Bắt buộc có metric/log để verify sau action |
-| Idempotency | Không execute trùng cùng `Idempotency-Key` |
+| Idempotency | Không execute trùng cùng `Idempotency-Key`; ưu tiên DynamoDB conditional write |
 | AI confidence | Ngưỡng execute cần chốt với AI |
 | Failure fallback | AI 503/timeout -> escalate + audit, không execute mặc định |
 
@@ -232,7 +237,7 @@ Telemetry theo contract AI:
 | `app_log_error_event` | CloudWatch Logs parser |
 | `trace_span_error_event` | OpenTelemetry/X-Ray/Jaeger |
 
-W11 Pack #1 sẽ mô tả schema và data source. W12 sẽ collect evidence thật từ sandbox hoặc simulation dataset RE2/RE3 tùy AI/trainer xác nhận.
+Với Offline Simulation Mode, nguồn chính là `metrics.csv`, `logs.csv`, `traces.csv` từ RE2/RE3; CDO preprocessor tính toán signal phái sinh, inject `tenant_id` và emit qua SQS. W12 sẽ collect evidence từ simulation dataset, và có thể bổ sung sandbox telemetry nếu trainer yêu cầu action thật.
 
 ## 10. Scaling Strategy
 
@@ -242,6 +247,7 @@ Scaling trong Pack #1 được thiết kế ở mức khả thi cho W12 demo, kh
 |---|---|---|
 | CDO executor | Kubernetes Deployment replicas | CPU, request count, queue length nếu có |
 | Telemetry collector | Scale theo log/metric volume | CloudWatch/Prometheus scrape load |
+| Telemetry queue | SQS buffer | Queue depth / age of oldest message |
 | AI Engine | Theo deployment contract của AI trên ECS Fargate | CPU, memory, request latency |
 | Workload target | Theo AI action plan và safety gate | Queue backlog, latency/error rate |
 
@@ -299,7 +305,7 @@ Mục tiêu T6 W11 là có skeleton/base IaC rõ ràng và commit evidence. Mứ
 
 - Cần AI confirm boundary: AI chỉ trả `action_plan` hay AI cũng execute Kubernetes action.
 - Cần trainer confirm T6 yêu cầu infra chạy thật tới mức nào.
-- Cần AI/trainer confirm Offline Simulation Mode là mock execute hay action thật trên sandbox.
+- Offline Simulation Mode đã là Mock Mode theo contract AI; cần trainer confirm có cần bổ sung action thật trên sandbox không.
 - Cần chốt confidence threshold để CDO được execute action.
 
 ## Related Documents

@@ -104,6 +104,7 @@ IAM/Auth trả lời câu hỏi: service nào được gọi service nào. Với
 | Identity | Used by | Permissions |
 |---|---|---|
 | CDO executor AWS role | Executor pod/task | Gọi AI endpoint với IAM SigV4, ghi audit S3, ghi logs |
+| CDO telemetry preprocessor role | Preprocessor/collector | Đọc telemetry source, ghi SQS telemetry queue nếu dùng Offline Simulation Mode |
 | AI service role | AI ECS Fargate | Theo deployment contract của AI |
 | Deploy role | Terraform/CI | Tạo VPC/EKS/IAM/S3/observability theo scope |
 | Readonly reviewer role | Mentor/trainer review | Read-only logs, audit, infra describe |
@@ -166,6 +167,7 @@ Secrets dự kiến:
 | Webhook signing key | AWS Secrets Manager hoặc K8s Secret | Alert ingestor |
 | Kube access | Kubernetes ServiceAccount token | CDO executor |
 | Audit bucket config | Terraform variables/outputs | Executor/deploy pipeline |
+| Idempotency lock table config | Terraform outputs / env var | CDO executor |
 
 Controls:
 
@@ -173,6 +175,7 @@ Controls:
 - Không log bearer token, SigV4 headers đầy đủ hoặc kube token.
 - Redact PII và credential-like strings trong logs.
 - Ưu tiên IRSA thay vì static AWS keys trong pod.
+- Idempotency lock dùng DynamoDB conditional write hoặc Redis TTL theo deployment contract; CDO-02 ưu tiên DynamoDB để tránh static state trong pod.
 
 ## 8. Audit Logging
 
@@ -189,6 +192,7 @@ detect_called
 detect_response_received
 decide_called
 action_plan_received
+idempotency_lock_acquired / idempotency_duplicate_denied
 safety_passed / safety_denied
 dry_run_done
 execute_done
@@ -209,6 +213,7 @@ Audit record tối thiểu:
 | `decision` | execute/deny/escalate |
 | `result` | success/failure/denied |
 | `reason` | Lý do safety deny hoặc failure |
+| `idempotency_key` | Chống execute trùng action |
 
 Storage target theo contract AI: **S3 Object Lock Compliance Mode**, retention tối thiểu 90 ngày.
 
@@ -230,6 +235,7 @@ Phần này liệt kê các tình huống nguy hiểm và control tương ứng.
 | AI trả namespace sai tenant | Safety gate deny + RBAC deny |
 | AI timeout/503 | No execute, escalate + audit |
 | Idempotency key trùng | Không execute trùng |
+| SQS telemetry message sai schema | Reject message, log validation error, không gọi AI |
 | Audit write fail | Stop action hoặc mark incident unsafe |
 | Executor bị lỗi giữa action | Verify/rollback/escalate theo trạng thái audit |
 | Secret bị lộ trong log | Redaction + không log sensitive headers |
@@ -240,6 +246,7 @@ Phần này liệt kê các tình huống nguy hiểm và control tương ứng.
 - Nếu AI giữ kubeconfig, boundary RBAC giữa AI và CDO executor là gì?
 - Trainer có bắt buộc S3 Object Lock thật cho W11/T6 không, hay W12 mới cần evidence?
 - Traces có bắt buộc phải triển khai đầy đủ trong W12 demo không?
+- Offline Simulation Mode đã là Mock Mode theo AI contract; trainer có cần thêm bằng chứng action thật trên Kubernetes sandbox không?
 
 ## Related Documents
 

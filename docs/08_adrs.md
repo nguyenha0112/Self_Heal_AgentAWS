@@ -144,6 +144,7 @@ CDO-02 chọn observability stack theo hướng:
 - CloudWatch Logs cho logs.
 - Container Insights/Prometheus-compatible metrics cho metrics.
 - OpenTelemetry schema tương thích Jaeger hoặc AWS X-Ray cho traces.
+- Với RE2/RE3 Offline Simulation Mode, dùng telemetry preprocessor đọc `metrics.csv`, `logs.csv`, `traces.csv`, inject `tenant_id`, chuẩn hóa signal và emit qua SQS theo contract AI.
 
 W11 Pack #1 tập trung design/schema; W12 mới thu evidence thật từ sandbox hoặc simulation.
 
@@ -154,9 +155,65 @@ W11 Pack #1 tập trung design/schema; W12 mới thu evidence thật từ sandbo
 - Pro: Có thể demo logs/metrics trước, traces bổ sung nếu kịp.
 - Trade-off: Triển khai đủ traces có thể tốn thời gian.
 - Trade-off: Cần normalize telemetry trước khi gọi AI.
+- Trade-off: Cần build preprocessor/SQS flow cho dataset simulation.
 
 ### Alternatives considered
 
 - CloudWatch-only: đơn giản hơn nhưng không đáp ứng trace signal đầy đủ.
 - Full Prometheus/Grafana/Jaeger stack: mạnh nhưng nhiều moving parts cho capstone.
 
+---
+
+## ADR-006 - Chọn DynamoDB conditional write cho idempotency lock
+
+- **Status:** Accepted
+- **Date:** 2026-06-24
+
+### Context
+
+AI API Contract yêu cầu `Idempotency-Key` cho các request thay đổi trạng thái như `/v1/decide` và `/v1/verify`. Deployment Contract cũng mô tả nhu cầu idempotency lock để tránh execute cùng một action nhiều lần khi có retry hoặc lỗi mạng.
+
+### Decision
+
+CDO-02 chọn **DynamoDB conditional write** làm cơ chế idempotency lock mặc định. Mỗi action sẽ ghi lock theo `Idempotency-Key`; nếu key đã tồn tại, CDO từ chối execute trùng và ghi audit.
+
+### Consequences
+
+- Pro: AWS-native, phù hợp với kiến trúc trên AWS.
+- Pro: Conditional write rõ ràng để chống race condition.
+- Pro: Dễ audit và debug theo key.
+- Trade-off: Cần thêm DynamoDB table và IAM permission.
+- Trade-off: Với demo nhỏ, Redis/local lock có thể đơn giản hơn nhưng kém bền hơn.
+
+### Alternatives considered
+
+- Redis lock TTL: nhanh, đơn giản nhưng cần thêm runtime dependency.
+- In-memory lock: dễ làm nhất nhưng không an toàn khi executor restart hoặc scale nhiều replicas.
+
+---
+
+## ADR-007 - Chấp nhận Mock Mode cho RE2/RE3 Offline Simulation
+
+- **Status:** Accepted, pending trainer evidence confirmation
+- **Date:** 2026-06-24
+
+### Context
+
+AI API Contract và Deployment Contract xác định RE2/RE3 là dataset offline tĩnh. Vì vậy luồng execute action như `RESTART_DEPLOYMENT` hoặc `SCALE_UP_PODS` sẽ chạy ở dạng giả lập: CDO ghi nhận action giả định, sau đó gửi `post_telemetry_window` từ dataset sang `/v1/verify`.
+
+### Decision
+
+CDO-02 chấp nhận **Mock Mode** cho luồng RE2/RE3 offline simulation để align với AI contract. Nếu trainer yêu cầu demo action thật, CDO-02 sẽ bổ sung một sandbox Kubernetes scenario riêng, nhưng không xem đó là nguồn verify chính cho RE2/RE3 dataset.
+
+### Consequences
+
+- Pro: Khớp contract AI và dataset offline.
+- Pro: Giảm rủi ro build khi chưa có full live telemetry.
+- Pro: Dễ tạo repeatable test scenario.
+- Trade-off: Demo có thể bị xem là ít "real" hơn action thật trên Kubernetes.
+- Trade-off: Cần giải thích rõ difference giữa simulation evidence và live sandbox evidence.
+
+### Alternatives considered
+
+- Action thật trên Kubernetes cho toàn bộ flow: thuyết phục hơn nhưng khó khớp RE2/RE3 offline telemetry.
+- Chỉ dùng mock endpoint không có dataset: dễ làm nhưng evidence yếu hơn.

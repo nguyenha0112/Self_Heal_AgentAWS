@@ -117,7 +117,7 @@ Các điểm dưới đây cần hỏi trainer/mentor đóng vai client trước
 | Blast-radius limit | Một lần self-heal được thao tác tối đa bao nhiêu deployment/replica/namespace? | Ảnh hưởng safety gate |
 | Escalation policy | Retry mấy lần trước khi escalate? Escalation message cần format Slack/Markdown/JSON? | Ảnh hưởng workflow và AI response |
 | Observability requirement | Traces trong AI contract cần triển khai đầy đủ ở W12 hay chấp nhận phased implementation? | Ảnh hưởng tool choice: CloudWatch, Prometheus, X-Ray/OpenTelemetry |
-| Offline simulation | Trainer có chấp nhận Mock Mode theo RE2/RE3 dataset cho action như restart/scale không? | Ảnh hưởng demo và test evidence |
+| Offline simulation | AI contract đã định nghĩa Mock Mode cho RE2/RE3; cần trainer xác nhận Mock Mode có đủ evidence cho W12 demo không. | Ảnh hưởng demo và test evidence |
 
 Trong khi chờ trainer/client confirm, CDO-02 sẽ ghi các điểm này là **assumption**, không xem là quyết định cuối cùng.
 
@@ -144,11 +144,13 @@ Yêu cầu chung từ AI contract:
 - Mọi signal phải có `tenant_id`.
 - Với offline dataset, CDO inject `tenant_id` là `tnt-re2-simulation` hoặc `tnt-re3-simulation`.
 - Timestamp dùng RFC3339 UTC.
+- Với RE2/RE3, CDO preprocessor đọc `metrics.csv`, `logs.csv`, `traces.csv`, chuẩn hóa signal và emit qua SQS theo contract AI.
 - CDO phải lọc/mã hóa PII trước khi gửi log sang AI.
 
 CDO-02 sẽ đáp ứng bằng cách:
 
 - Thiết kế telemetry pipeline ưu tiên CloudWatch/Container Insights/Prometheus-compatible metrics.
+- Với Offline Simulation Mode, thiết kế preprocessor đọc CSV RE2/RE3 và gửi signal đã chuẩn hóa qua SQS.
 - Chuẩn hóa metrics/logs/traces thành JSON trước khi gọi AI API.
 - Gắn `tenant_id`, `correlation_id` và timestamp UTC cho mọi request.
 - Với W11 Pack #1, mô tả schema và nguồn dữ liệu; W12 mới thu evidence thật từ sandbox.
@@ -246,7 +248,7 @@ CDO-02 cần chốt lại với AI:
 - AI có execute action trực tiếp không, hay chỉ trả `action_plan` cho CDO?
 - Nếu AI giữ kubeconfig, boundary RBAC cụ thể ra sao?
 - Nếu CDO là executor duy nhất, cần sửa Deployment Contract để bỏ quyền AI gọi EKS API.
-- Offline Simulation Mode nghĩa là CDO chỉ mock execute action, vậy evidence W12 sẽ là mock action hay action thật trên sandbox?
+- Offline Simulation Mode theo AI contract là Mock Mode; CDO cần xác nhận với AI/trainer evidence W12 sẽ ưu tiên mock action theo dataset hay bổ sung action thật trên sandbox.
 
 ## 10. Assumptions
 
@@ -256,6 +258,7 @@ CDO-02 cần chốt lại với AI:
 - Region mặc định theo client brief là `us-east-1`, trừ khi trainer/mentor yêu cầu khác.
 - Observability theo contract AI gồm CloudWatch Logs, Prometheus metrics endpoint và OpenTelemetry traces về Jaeger hoặc AWS X-Ray.
 - Audit storage theo contract AI là S3 Object Lock Compliance Mode, retention tối thiểu 90 ngày.
+- Idempotency lock theo deployment contract AI dùng DynamoDB conditional write hoặc Redis lock TTL 5 phút; CDO-02 ưu tiên DynamoDB để khớp AWS-native design.
 - CDO-02 có thể dùng mock/skeleton AI endpoint từ T6 W11 đến trước integration session W12.
 
 ## 11. Open Questions (cần bàn với AI / trainer)
@@ -268,7 +271,7 @@ Các câu hỏi còn lại cần chốt với AI team hoặc trainer/mentor.
 2. AI có đồng ý 2 design-only patterns: queue/backpressure và secret/cert/config issue không?
 3. CDO-02 có cần đổi naming pattern để khớp RE2/RE3 và Online Boutique không?
 4. AI có thật sự cần kubeconfig/EKS API permission không, hay chỉ trả `action_plan`?
-5. Offline Simulation Mode sẽ mock action hoàn toàn hay vẫn cần CDO thao tác Kubernetes sandbox?
+5. Offline Simulation Mode đã là Mock Mode theo contract; AI/trainer có yêu cầu thêm action thật trên Kubernetes sandbox để demo không?
 6. AI skeleton endpoint khi nào có để CDO test integration?
 7. Với `503`, CDO nên ưu tiên static runbook fallback hay escalation thẳng cho SRE?
 
