@@ -158,7 +158,6 @@ PATCH_MEMORY_LIMIT
 SCALE_REPLICAS
 ROLLOUT_UNDO
 ROTATE_SECRET
-DELETE_POD
 ```
 
 W11 Pack #1 chỉ chốt design và contract alignment. Theo AI API Contract, RE2/RE3 Offline Simulation Mode chạy ở dạng **Mock Mode**: CDO ghi nhận action giả định đã thực hiện, rồi gửi `post_telemetry_window` từ dataset sang `/v1/verify`. Nếu trainer yêu cầu, CDO-02 sẽ bổ sung demo action thật trên Kubernetes sandbox ở W12.

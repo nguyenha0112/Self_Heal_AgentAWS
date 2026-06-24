@@ -243,7 +243,7 @@ Phần này liệt kê các tình huống nguy hiểm và control tương ứng.
 ## 11. Open Questions
 
 - Confirm tenant UUID chính thức của CDO-02 với AI.
-- Confirm confidence threshold, `DELETE_POD` policy, `suspected_fault_type` enum và SQS ownership nếu còn dùng.
+- Confirm confidence threshold, `ROTATE_SECRET` policy, `suspected_fault_type` enum và SQS ownership nếu còn dùng.
 - Trainer có bắt buộc S3 Object Lock thật cho W11/T6 không, hay W12 mới cần evidence?
 - Traces có bắt buộc phải triển khai đầy đủ trong W12 demo không?
 - Offline Simulation Mode đã là Mock Mode theo AI contract; trainer có cần thêm bằng chứng action thật trên Kubernetes sandbox không?

@@ -192,7 +192,6 @@ PATCH_MEMORY_LIMIT
 SCALE_REPLICAS
 ROLLOUT_UNDO
 ROTATE_SECRET
-DELETE_POD
 ```
 
 SLA/API behavior từ contract:
@@ -210,8 +209,8 @@ SLA/API behavior từ contract:
 CDO-02 sẽ đáp ứng bằng cách:
 
 - Xây executor/safety gate consume `action_plan[]` từ `/v1/decide`.
-- Chỉ execute các action nằm trong allow-list của contract mới: `RESTART_DEPLOYMENT`, `PATCH_MEMORY_LIMIT`, `SCALE_REPLICAS`, `ROLLOUT_UNDO`, `ROTATE_SECRET`, `DELETE_POD`.
-- Mặc định deny hoặc require manual approval cho `DELETE_POD` và `ROTATE_SECRET` cho tới khi AI xác nhận policy demo.
+- Chỉ execute các action nằm trong allow-list của contract mới: `RESTART_DEPLOYMENT`, `PATCH_MEMORY_LIMIT`, `SCALE_REPLICAS`, `ROLLOUT_UNDO`, `ROTATE_SECRET`.
+- Mặc định deny hoặc require manual approval cho `ROTATE_SECRET` cho tới khi AI xác nhận policy demo.
 - Validate `tenant_id`, target namespace, `allowed_namespaces`, blast-radius, local rollback/runbook path và `verify_policy` trước khi execute.
 - Dùng `Idempotency-Key` để tránh execute trùng một incident.
 - Với `429`, dùng retry/backoff theo contract.
@@ -249,7 +248,7 @@ CDO-02 cần chốt lại với AI:
 
 - Tenant UUID chính thức của CDO-02 có đúng là `6c8b4b2b-4d45-4209-a1b4-4b532d56a31c` không?
 - Ngưỡng `confidence` tối thiểu để CDO gọi `/v1/decide` và execute là bao nhiêu?
-- AI có trả `DELETE_POD` trong demo không, hay CDO nên deny/manual approval action này?
+- AI có trả `ROTATE_SECRET` trong demo không, hay CDO nên deny/manual approval action này?
 - AI có publish enum `suspected_fault_type` không?
 - Offline Simulation Mode theo AI contract là Mock Mode; CDO cần xác nhận với AI/trainer evidence W12 sẽ ưu tiên mock action theo dataset hay bổ sung action thật trên sandbox.
 

@@ -86,7 +86,6 @@ Nếu có SLO miss sau khi chạy test, điền bảng này để giải thích 
 |---|---|---|---|---|
 | TC-07 | Cross-tenant target | Incident tenant là `tenant-a`, AI action target `tenant-b` | Deny action | Không có Kubernetes mutation, audit reason `denied_cross_tenant` |
 | TC-08 | Action ngoài allow-list | AI trả `DELETE_NAMESPACE` | Deny action | Không có Kubernetes mutation, audit reason `denied_action_not_allowed` |
-| TC-08b | Risky contract action | AI trả `DELETE_POD` | Deny hoặc require manual approval pending AI policy | Không có Kubernetes mutation tự động |
 | TC-09 | Thiếu local rollback/runbook path | Mutating action không có fallback path cục bộ | Deny action | Audit ghi `missing_rollback_path` |
 | TC-10 | Thiếu `verify_policy` | Mutating action không có `verify_policy.window_seconds` | Deny action | Audit ghi `missing_verify_policy` |
 | TC-11 | Duplicate idempotency key | Retry cùng action với cùng `Idempotency-Key` | Deny duplicate execute | Chỉ có 1 execute event cho key đó |
