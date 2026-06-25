@@ -20,19 +20,38 @@ spec:
         selfheal.ai/service: checkout-svc
     spec:
       containers:
-        - name: http-echo
-          image: hashicorp/http-echo:1.0
-          args:
-            - "-text=CDO-02 tenant-a sample workload"
+        - name: podinfo
+          image: ghcr.io/stefanprodan/podinfo:6.14.0
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: PODINFO_UI_MESSAGE
+              value: "CDO-02 tenant-a checkout-svc sample workload"
+            - name: PODINFO_UI_COLOR
+              value: "#1f6feb"
           ports:
-            - containerPort: 5678
+            - name: http
+              containerPort: 9898
+            - name: metrics
+              containerPort: 9797
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
           resources:
             requests:
-              cpu: 25m
-              memory: 32Mi
-            limits:
-              cpu: 100m
+              cpu: 50m
               memory: 64Mi
+            limits:
+              cpu: 250m
+              memory: 128Mi
 ---
 apiVersion: v1
 kind: Service
@@ -48,4 +67,7 @@ spec:
   ports:
     - name: http
       port: 80
-      targetPort: 5678
+      targetPort: http
+    - name: metrics
+      port: 9797
+      targetPort: metrics

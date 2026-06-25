@@ -16,7 +16,7 @@
       "service": "checkout-svc",
       "namespace": "tenant-a",
       "deployment": "cdo-sample-api",
-      "container": "http-echo",
+      "container": "podinfo",
       "demo_priority": "primary_live_restart_target"
     },
     {
@@ -245,7 +245,7 @@
     }
   ],
   "ai_usage_notes": [
-    "Use checkout-svc -> tenant-a -> cdo-sample-api as the primary W11/W12 live Kubernetes restart scenario.",
+    "Use checkout-svc -> tenant-a -> cdo-sample-api -> podinfo as the primary W11/W12 live Kubernetes restart scenario.",
     "Use catalog-svc -> tenant-b as the cross-tenant deny test when the incident tenant is tenant-a.",
     "AI should return action targets by namespace and deployment, not pod name.",
     "CDO will enforce allowed_namespaces before any Kubernetes mutation."

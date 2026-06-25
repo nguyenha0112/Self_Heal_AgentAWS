@@ -18,6 +18,10 @@ Runbook to capture live evidence when Kubernetes API access is available:
    kubectl get ns tenant-a tenant-b platform --show-labels
    kubectl get deploy,pod,svc -n tenant-a -o wide
    kubectl rollout status deployment/cdo-sample-api -n tenant-a --timeout=120s
+   kubectl port-forward -n tenant-a svc/cdo-sample-api 9898:80 9797:9797
+   curl http://127.0.0.1:9898/healthz
+   curl http://127.0.0.1:9898/readyz
+   curl http://127.0.0.1:9898/metrics
 
 3. Execute real safe action:
    kubectl rollout restart deployment/cdo-sample-api -n tenant-a

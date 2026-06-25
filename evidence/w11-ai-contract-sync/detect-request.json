@@ -8,7 +8,7 @@
     "service": "checkout-svc",
     "namespace": "tenant-a",
     "deployment": "cdo-sample-api",
-    "container": "http-echo"
+    "container": "podinfo"
   },
   "telemetry_window": {
     "start_time": "2026-06-25T00:55:00Z",

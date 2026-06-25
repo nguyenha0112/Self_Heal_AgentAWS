@@ -41,6 +41,7 @@ This folder is the handoff package for AI Team integration.
 - `safety-gate-result.txt`: pass/deny decisions CDO will enforce.
 - `kubectl-before-after.txt`: commands for capturing live Kubernetes restart evidence.
 - `topology-graph-sample.json`: topology graph and CDO service-to-namespace-to-deployment mapping for AI.
+- `manifests/workloads/tenant-a-sample-app.yaml`: public `podinfo` app deployment used as the real sandbox workload.
 
 ## Live demo path
 
@@ -52,6 +53,10 @@ kubectl apply -f manifests/namespaces/tenant-a.yaml
 kubectl apply -f manifests/namespaces/tenant-b.yaml
 kubectl apply -f manifests/workloads/tenant-a-sample-app.yaml
 kubectl get deploy,pod,svc -n tenant-a -o wide
+kubectl port-forward -n tenant-a svc/cdo-sample-api 9898:80 9797:9797
+curl http://127.0.0.1:9898/healthz
+curl http://127.0.0.1:9898/readyz
+curl http://127.0.0.1:9898/metrics
 kubectl rollout restart deployment/cdo-sample-api -n tenant-a
 kubectl rollout status deployment/cdo-sample-api -n tenant-a --timeout=120s
 kubectl get deploy,pod,svc -n tenant-a -o wide

@@ -349,6 +349,8 @@ CDO added sample workload manifest for the safe live action demo:
 manifests/workloads/tenant-a-sample-app.yaml
 ```
 
+The workload uses the public `stefanprodan/podinfo` Kubernetes demo app, which provides health/readiness endpoints and Prometheus metrics. CDO maps it as `checkout-svc -> tenant-a -> deployment/cdo-sample-api -> container/podinfo`.
+
 The intended real action demo is:
 
 ```text
