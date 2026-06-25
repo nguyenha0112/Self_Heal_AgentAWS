@@ -56,7 +56,7 @@ CDO-02 không làm các phần sau trong scope capstone:
 - Không làm real PagerDuty/OpsGenie; Slack/mock pager là đủ.
 - Không làm hash-chain crypto audit; S3 Object Lock hoặc append-only audit là đủ.
 - Không làm cross-region replication.
-- Không làm mTLS giữa các CDO components nội bộ; IAM SigV4 là auth bắt buộc cho mọi AI API call (confirmed contract).
+- Auth cho AI API call dùng **Local Trust + K8s NetworkPolicy** (mTLS tùy chọn); không cần IAM SigV4 signing để gọi AI endpoint (confirmed new contract).
 
 ## 5. Hướng Khác Biệt Của CDO-02
 
@@ -176,14 +176,14 @@ POST /v1/verify
 Authentication và headers (bắt buộc cho mọi request):
 
 ```text
-Authorization: IAM SigV4  ← BẮT BUỘC kể cả khi AI chạy in-cluster (confirmed)
+Authorization: AWS Signature Version 4 (header vẫn present theo contract spec)
 X-Tenant-Id: 6c8b4b2b-4d45-4209-a1b4-4b532d56a31c
 Idempotency-Key: UUID v4 (bắt buộc cho CẢ BA endpoints)
 X-Dry-Run-Mode: "true" hoặc "false" (bắt buộc cho cả ba endpoints)
 X-Correlation-Id: UUID v4 (tùy chọn cho detect, bắt buộc cho decide/verify)
 ```
 
-> **Ghi chú auth (confirmed 2026-06-25)**: Dù AI Engine deploy in-cluster (ClusterIP service), CDO Executor vẫn phải sign request bằng **IAM SigV4** theo AI API Contract. CDO Executor cần dùng IRSA/EKS Pod Identity để lấy credentials tự động; không hardcode key.
+> **Ghi chú auth (updated 2026-06-25 → new contract)**: Auth cho AI endpoint là **Local Trust + K8s NetworkPolicy** (mTLS tùy chọn) — CDO Executor không cần SigV4 signing để gọi AI in-cluster. K8s NetworkPolicy restrict chỉ pods có label `app=cdo-self-heal-controller` mới được reach port 8080 của AI Engine. IRSA/EKS Pod Identity vẫn cần cho CDO Executor gọi các AWS services (S3, DynamoDB, CloudWatch, Secrets Manager).
 
 Luồng tích hợp:
 
@@ -245,7 +245,7 @@ Theo contract AI:
 - AI team bàn giao **OCI-compliant container image** để CDO-02 tự pull và deploy trực tiếp vào EKS của mình.
 - Endpoint tích hợp mục tiêu không còn là shared endpoint dùng chung, mà là service nội bộ trong cluster, ví dụ:
   `http://ai-engine.self-heal-system.svc.cluster.local:8080/`
-- Auth: IAM SigV4.
+- Auth: **Local Trust (mTLS tùy chọn)** — bảo mật bởi K8s NetworkPolicy in-cluster, không dùng IAM SigV4 cho AI endpoint.
 - Tenant ID cho CDO-02: `6c8b4b2b-4d45-4209-a1b4-4b532d56a31c` (**confirmed** trong deployment contract 2026-06-25).
 - AI service chạy trong namespace `self-heal-system`, port `8080`, không public Internet.
 - Health endpoints: `GET /health`, `GET /ready`, `GET /metrics`.
@@ -257,7 +257,7 @@ Theo contract AI:
 CDO-02 sẽ đáp ứng bằng cách:
 
 - Thiết kế network path để CDO executor gọi AI endpoint nội bộ theo deployment contract.
-- Sử dụng IAM SigV4 theo yêu cầu auth của AI.
+- Đảm bảo CDO executor pod có label hợp lệ để K8s NetworkPolicy cho phép reach AI endpoint (Local Trust).
 - Gắn tenant ID `6c8b4b2b-4d45-4209-a1b4-4b532d56a31c` cho requests của CDO-02.
 - Ghi log request/response theo `correlation_id` để trace được end-to-end.
 - Thiết kế audit storage tương thích S3 Object Lock 90 ngày.
@@ -318,6 +318,6 @@ Tổng hợp trạng thái các câu hỏi với AI team và trainer/mentor.
 - [x] Giả định đã được xác nhận hoặc đánh dấu là rủi ro. (Section 10)
 - [x] Tenant ID confirmed. (`6c8b4b2b-4d45-4209-a1b4-4b532d56a31c` — confirmed deployment contract 2026-06-25)
 - [x] 12 telemetry signals aligned với AI telemetry contract. (Section 9.1)
-- [x] IAM SigV4 bắt buộc confirmed. (Section 9.2)
+- [x] Auth AI endpoint: Local Trust + K8s NetworkPolicy (updated từ IAM SigV4 theo new contract). (Section 9.2)
 - [x] ROTATE_SECRET confirmed build thật. (Section 6.1, Section 9.2)
 - [ ] File committed as Pack #1 evidence. (chờ git commit)

@@ -82,7 +82,7 @@ graph TB
         end
     end
 
-    EXEC -->|HTTP + IAM SigV4 header in-cluster| AI
+    EXEC -->|HTTP in-cluster (Local Trust + K8s NetworkPolicy)| AI
     EXEC -->|Kubernetes API| EKS
     EXEC --> CW
     EXEC --> S3
@@ -91,19 +91,19 @@ graph TB
 
 ### 3.2 Quy Tắc Network
 
-- AI endpoint là internal endpoint, không public Internet. Transport là HTTP in-cluster (`http://ai-engine.self-heal-system.svc.cluster.local:8080/`); SigV4 signing vẫn bắt buộc dù không có TLS transport.
-- CDO executor gọi AI qua HTTP in-cluster với IAM SigV4 header.
+- AI endpoint là internal endpoint, không public Internet. Transport là HTTP in-cluster (`http://ai-engine.self-heal-system.svc.cluster.local:8080/`); bảo mật bởi K8s NetworkPolicy (Local Trust), không yêu cầu IAM SigV4 signing.
+- CDO executor gọi AI qua HTTP in-cluster — K8s NetworkPolicy restrict chỉ pods có label `app=cdo-self-heal-controller` được phép reach port 8080 của AI Engine.
 - Kubernetes API access chỉ dành cho executor ServiceAccount/Role phù hợp.
 - Audit/log traffic đi tới CloudWatch và S3.
 - Nếu cần NAT/VPC endpoints, ưu tiên VPC endpoints cho S3, CloudWatch, Secrets Manager để giảm public exposure.
 
 ## 4. IAM Và Authentication
 
-IAM/Auth trả lời câu hỏi: service nào được gọi service nào. Với contract AI hiện tại, CDO executor gọi AI bằng IAM SigV4 và tenant UUID `6c8b4b2b-4d45-4209-a1b4-4b532d56a31c` đã được xác nhận chính thức trong deployment contract (CDO-02 = cdo-2).
+IAM/Auth trả lời câu hỏi: service nào được gọi service nào. Theo new contract, AI endpoint dùng **Local Trust + K8s NetworkPolicy** (mTLS tùy chọn) — CDO executor không cần SigV4 để gọi AI. Tenant UUID `6c8b4b2b-4d45-4209-a1b4-4b532d56a31c` vẫn gửi qua header `X-Tenant-Id`. IRSA vẫn cần cho CDO executor gọi các AWS services.
 
 | Identity | Used by | Permissions |
 |---|---|---|
-| CDO executor AWS role | Executor pod/task | Gọi AI endpoint với IAM SigV4, ghi audit S3, ghi logs |
+| CDO executor AWS role | Executor pod/task | Gọi AWS services (S3 audit, DynamoDB, CloudWatch) qua IRSA; gọi AI endpoint qua Local Trust (K8s NetworkPolicy) |
 | CDO telemetry preprocessor role | Preprocessor/collector | Đọc telemetry source, scrub PII/secret, validate schema, optionally ghi SQS buffer nếu CDO dùng Offline Simulation Mode |
 | AI service role | AI Engine pod/service account trên EKS | Theo IRSA/EKS Pod Identity policy trong contract AI mới nhất |
 | Deploy role | Terraform/CI | Tạo VPC/EKS/IAM/S3/observability theo scope |
@@ -183,7 +183,7 @@ Secrets dự kiến:
 
 | Secret | Storage | Accessed by |
 |---|---|---|
-| AI endpoint auth/IAM config | IAM/IRSA hoặc AWS SDK default chain | CDO executor |
+| AI endpoint auth | K8s NetworkPolicy (Local Trust) — không cần secret riêng; executor pod label là "credential" | CDO executor |
 | Webhook signing key | AWS Secrets Manager hoặc K8s Secret | Alert ingestor |
 | Kube access | Kubernetes ServiceAccount token | CDO executor |
 | Audit bucket config | Terraform variables/outputs | Executor/deploy pipeline |

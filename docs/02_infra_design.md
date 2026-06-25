@@ -123,7 +123,7 @@ CDO-02 consume AI API Contract như sau:
 Headers/auth theo contract:
 
 ```text
-Authorization: IAM SigV4
+Authorization: AWS Signature Version 4 (header present theo contract spec)
 X-Tenant-Id: 6c8b4b2b-4d45-4209-a1b4-4b532d56a31c      ← confirmed chính thức
 Idempotency-Key: UUID v4 (bắt buộc 3 endpoints)
 X-Dry-Run-Mode: "true" hoặc "false" (bắt buộc 3 endpoints)
@@ -148,7 +148,7 @@ ROLLOUT_UNDO
 ROTATE_SECRET    ← confirmed build thật (trigger: secret_expiry_warning, pattern_type: deferred)
 ```
 
-> **Auth note (confirmed 2026-06-25)**: IAM SigV4 header bắt buộc cho mọi request kể cả khi AI chạy in-cluster. CDO Executor dùng IRSA/EKS Pod Identity để sign; không dùng static key.
+> **Auth note (updated new contract)**: Auth cho AI endpoint là **Local Trust + K8s NetworkPolicy** (mTLS tùy chọn). CDO Executor không cần sign SigV4 để gọi AI in-cluster — K8s NetworkPolicy kiểm soát truy cập. IRSA/EKS Pod Identity vẫn cần cho CDO gọi AWS services (S3, DynamoDB, CloudWatch).
 
 **Xử lý `pattern_type` (bắt buộc):**
 
