@@ -2,7 +2,7 @@
 
 **Doc owner:** CDO-02  
 **Trạng thái:** Ready for W11 Pack #1 review  
-**Cập nhật lần cuối:** 2026-06-23  
+**Cập nhật lần cuối:** 2026-06-25 (sync AI commit 86b32e7)  
 
 ## 1. Bối cảnh đề tài
 
@@ -166,25 +166,26 @@ POST /v1/decide
 POST /v1/verify
 ```
 
-Authentication và headers:
+Authentication và headers (bắt buộc cho mọi request):
 
 ```text
 Authorization: IAM SigV4
 X-Tenant-Id: 6c8b4b2b-4d45-4209-a1b4-4b532d56a31c
-Idempotency-Key: UUID v4 cho request thay đổi trạng thái
-X-Correlation-Id hoặc correlation_id để trace toàn bộ workflow
+Idempotency-Key: UUID v4 (bắt buộc cho CẢ BA endpoints)
+X-Dry-Run-Mode: "true" hoặc "false" (bắt buộc cho cả ba endpoints)
+X-Correlation-Id: UUID v4 (tùy chọn cho detect, bắt buộc cho decide/verify)
 ```
 
 Luồng tích hợp:
 
 ```text
 /v1/detect -> AI trả anomaly_detected, severity, anomaly_context, confidence, reasoning, correlation_id
-/v1/decide -> AI trả matched_runbook, pattern_type, action_plan[], blast_radius_config, verify_policy
-CDO execute/mock execute action
+/v1/decide -> AI trả matched_runbook, pattern_type, action_plan[], blast_radius_config, verify_policy, cost_cap_exceeded
+CDO execute/mock execute action (theo pattern_type: urgent = direct K8s; deferred = Git commit/PR)
 /v1/verify -> CDO gửi idempotency_key, dry_run_mode, action_executed + post_telemetry_window; AI trả success, regression_detected, next_action, escalation_bundle nếu cần
 ```
 
-Các action AI contract đang định nghĩa:
+Các action AI contract định nghĩa (enum cố định):
 
 ```text
 RESTART_DEPLOYMENT
@@ -194,16 +195,23 @@ ROLLOUT_UNDO
 ROTATE_SECRET
 ```
 
-SLA/API behavior từ contract:
+**Xử lý `pattern_type` (CDO bắt buộc phân biệt):**
+
+- `pattern_type: "urgent"` → CDO execute trực tiếp qua Kubernetes API sau khi safety gate pass.
+- `pattern_type: "deferred"` → CDO **không được** direct mutate Kubernetes; phải tạo Git commit hoặc PR để GitOps sync về cluster.
+
+**Xử lý `cost_cap_exceeded: true`:** AI chuyển sang rule-based fallback. CDO vẫn execute action plan bình thường nhưng cần log cảnh báo và thông báo team.
+
+SLA/API behavior từ contract (cập nhật W11):
 
 - `/v1/detect` p99 < 300ms.
-- `/v1/decide` p99 < 500ms.
+- `/v1/decide` p99 < 3000ms (LLM Bedrock); fallback rule-based p99 < 500ms.
 - `/v1/verify` p99 < 500ms.
 - Availability target 99.9%.
-- Rate limit 120 requests/minute/tenant.
+- Rate limit: `/v1/detect` 100 RPS/tenant; `/v1/decide` và `/v1/verify` 10 RPS/tenant.
 - `400`: không retry tự động.
 - `409`: trùng `Idempotency-Key`.
-- `429`: exponential backoff.
+- `429`: exponential backoff (response có header `Retry-After`).
 - `503`: CDO phải fallback bằng static runbook hoặc escalation.
 
 CDO-02 sẽ đáp ứng bằng cách:
@@ -212,8 +220,12 @@ CDO-02 sẽ đáp ứng bằng cách:
 - Chỉ execute các action nằm trong allow-list của contract mới: `RESTART_DEPLOYMENT`, `PATCH_MEMORY_LIMIT`, `SCALE_REPLICAS`, `ROLLOUT_UNDO`, `ROTATE_SECRET`.
 - Mặc định deny hoặc require manual approval cho `ROTATE_SECRET` cho tới khi AI xác nhận policy demo.
 - Validate `tenant_id`, target namespace, `allowed_namespaces`, blast-radius, local rollback/runbook path và `verify_policy` trước khi execute.
-- Dùng `Idempotency-Key` để tránh execute trùng một incident.
-- Với `429`, dùng retry/backoff theo contract.
+- Dùng `Idempotency-Key` (bắt buộc cho cả ba endpoints, UUID v4) để tránh execute trùng một incident.
+- Gửi `X-Dry-Run-Mode` header bắt buộc cho mọi request.
+- Với `pattern_type: "urgent"`: execute trực tiếp qua Kubernetes API sau safety gate.
+- Với `pattern_type: "deferred"`: **không direct mutate Kubernetes**; tạo Git commit/PR để ArgoCD sync.
+- Khi nhận `cost_cap_exceeded: true`: log cảnh báo, vẫn execute action plan, thông báo team.
+- Với `429`, dùng retry/backoff theo contract (header `Retry-After`).
 - Với `503`, mặc định không tự ý execute; CDO sẽ escalate + audit, trừ khi static runbook fallback đã được AI/CDO thống nhất.
 
 ### 9.3 Deployment Contract
@@ -246,11 +258,14 @@ Deployment contract mới đã chốt ranh giới theo hướng CDO-02 yêu cầ
 
 CDO-02 cần chốt lại với AI:
 
-- Tenant UUID chính thức của CDO-02 có đúng là `6c8b4b2b-4d45-4209-a1b4-4b532d56a31c` không?
-- Ngưỡng `confidence` tối thiểu để CDO gọi `/v1/decide` và execute là bao nhiêu?
-- AI có trả `ROTATE_SECRET` trong demo không, hay CDO nên deny/manual approval action này?
-- AI có publish enum `suspected_fault_type` không?
-- Offline Simulation Mode theo AI contract là Mock Mode; CDO cần xác nhận với AI/trainer evidence W12 sẽ ưu tiên mock action theo dataset hay bổ sung action thật trên sandbox.
+- Tenant UUID `6c8b4b2b-4d45-4209-a1b4-4b532d56a31c` đã được AI xác nhận chính thức trong deployment contract (cdo-2).
+- SQS được telemetry contract xác nhận là internal CDO buffer (CDO owns). AI không pull từ SQS.
+- `X-Dry-Run-Mode` header là bắt buộc cho cả ba endpoints.
+- `Idempotency-Key` bắt buộc cho cả ba endpoints (không chỉ decide/verify).
+- `/v1/decide` SLA p99 < 3000ms khi dùng LLM Bedrock, < 500ms khi fallback rule-based.
+- Rate limit: detect 100 RPS/tenant, decide/verify 10 RPS/tenant.
+- `pattern_type: "deferred"` yêu cầu CDO tạo Git commit/PR, không direct mutate K8s.
+- Dead-Letter Queue (DLQ) bắt buộc cho telemetry bị AI reject (400 Bad Request).
 
 ## 10. Giả Định
 

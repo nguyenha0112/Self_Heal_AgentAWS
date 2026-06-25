@@ -2,7 +2,7 @@
 
 **Doc owner:** CDO-02  
 **Trạng thái:** Ready for W11 Pack #1 review  
-**Cập nhật lần cuối:** 2026-06-23  
+**Cập nhật lần cuối:** 2026-06-25 (sync AI commit 86b32e7)  
 
 ADR là nơi ghi lại các quyết định kiến trúc quan trọng, lý do chọn và trade-off. File này append-only; nếu decision thay đổi ở W12 thì thêm ADR mới hoặc đánh dấu ADR cũ là superseded.
 
@@ -48,6 +48,8 @@ AI contract định nghĩa `/v1/detect`, `/v1/decide`, `/v1/verify` và trả `a
 ### Decision
 
 CDO-02 chọn boundary: **AI chỉ decide, CDO executor mới execute**. AI trả action plan; CDO validate tenant, namespace, `allowed_namespaces`, blast-radius, local rollback/runbook path, `verify_policy` rồi mới execute hoặc deny/escalate.
+
+Khi AI trả `pattern_type: "urgent"`, CDO executor gọi Kubernetes API trực tiếp sau safety gate (RTO target < 60s). Khi AI trả `pattern_type: "deferred"`, CDO tạo Git commit hoặc PR để GitOps (ArgoCD) sync về cluster, không direct mutate Kubernetes.
 
 ### Consequences
 
@@ -217,3 +219,35 @@ CDO-02 chấp nhận **Mock Mode** cho luồng RE2/RE3 offline simulation để 
 
 - Action thật trên Kubernetes cho toàn bộ flow: thuyết phục hơn nhưng khó khớp RE2/RE3 offline telemetry.
 - Chỉ dùng mock endpoint không có dataset: dễ làm nhưng evidence yếu hơn.
+
+---
+
+## ADR-008 - Chọn GitOps path (ArgoCD PR) cho `pattern_type: deferred`
+
+- **Status:** Accepted
+- **Date:** 2026-06-25
+
+### Context
+
+AI API Contract (commit 86b32e7) chốt rõ hai luồng xử lý dựa trên `pattern_type`:
+- `"urgent"`: action khẩn cấp, CDO execute trực tiếp Kubernetes API.
+- `"deferred"`: action tích lũy cấu hình (ví dụ SCALE_REPLICAS do queue_backlog), CDO **bắt buộc** không direct mutate Kubernetes mà phải tạo Git commit/PR để ArgoCD sync.
+
+CDO-02 cần quyết định cụ thể cách implement path `"deferred"`.
+
+### Decision
+
+CDO-02 implement `pattern_type: "deferred"` bằng cách executor tự động tạo Git commit (hoặc PR nếu cần review) cập nhật manifest/Helm values, sau đó ArgoCD phát hiện thay đổi và sync về cluster. CDO không gọi Kubernetes API trực tiếp trong path này.
+
+### Consequences
+
+- Pro: Khớp AI contract, tránh state drift giữa Git và cluster.
+- Pro: ArgoCD drift detection đảm bảo cluster luôn khớp Git.
+- Pro: Có audit trail rõ (Git commit history + ArgoCD sync history).
+- Trade-off: Latency cao hơn path `"urgent"` (Git commit + ArgoCD sync ~2-5 phút).
+- Trade-off: CDO executor cần có quyền write vào Git repo và ArgoCD phải được cấu hình watch manifest repo.
+
+### Alternatives considered
+
+- Không implement deferred path: đơn giản hơn nhưng vi phạm AI contract.
+- Manual PR workflow: có approval gate nhưng quá chậm cho self-heal automation.

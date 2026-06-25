@@ -2,7 +2,7 @@
 
 **Doc owner:** CDO-02  
 **Trạng thái:** Ready for W11 Pack #1 review  
-**Cập nhật lần cuối:** 2026-06-23  
+**Cập nhật lần cuối:** 2026-06-25 (sync AI commit 86b32e7)  
 
 ## 1. Mục Tiêu Bảo Mật
 
@@ -99,7 +99,7 @@ graph TB
 
 ## 4. IAM Và Authentication
 
-IAM/Auth trả lời câu hỏi: service nào được gọi service nào. Với contract AI hiện tại, CDO executor gọi AI bằng IAM SigV4 và tenant UUID `6c8b4b2b-4d45-4209-a1b4-4b532d56a31c` pending AI confirmation.
+IAM/Auth trả lời câu hỏi: service nào được gọi service nào. Với contract AI hiện tại, CDO executor gọi AI bằng IAM SigV4 và tenant UUID `6c8b4b2b-4d45-4209-a1b4-4b532d56a31c` đã được xác nhận chính thức trong deployment contract (CDO-02 = cdo-2).
 
 | Identity | Used by | Permissions |
 |---|---|---|
@@ -242,11 +242,13 @@ Phần này liệt kê các tình huống nguy hiểm và control tương ứng.
 
 ## 11. Câu Hỏi Mở
 
-- Confirm tenant UUID chính thức của CDO-02 với AI.
-- Confirm confidence threshold, `ROTATE_SECRET` policy, `suspected_fault_type` enum và SQS ownership nếu còn dùng.
+- ~~Confirm tenant UUID chính thức của CDO-02 với AI.~~ **Resolved: `6c8b4b2b-4d45-4209-a1b4-4b532d56a31c`** (confirmed trong deployment contract AI commit 86b32e7).
+- ~~SQS ownership~~: **Resolved**: SQS là internal buffer của CDO. AI không pull từ SQS.
+- Confirm confidence threshold chính xác để CDO execute action (chưa có con số cụ thể trong contract).
+- Confirm `ROTATE_SECRET` policy cho demo: CDO mặc định deny/manual approval cho tới khi AI xác nhận.
 - Trainer có bắt buộc S3 Object Lock thật cho W11/T6 không, hay W12 mới cần evidence?
 - Traces có bắt buộc phải triển khai đầy đủ trong W12 demo không?
-- Offline Simulation Mode đã là Mock Mode theo AI contract; trainer có cần thêm bằng chứng action thật trên Kubernetes sandbox không?
+- `pattern_type: "deferred"` yêu cầu ArgoCD/GitOps path; cần chốt ArgoCD có sẵn trong W12 hay manual PR merge làm bằng chứng.
 
 ## Tài Liệu Liên Quan
 

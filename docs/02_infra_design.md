@@ -2,7 +2,7 @@
 
 **Doc owner:** CDO-02  
 **Trạng thái:** Ready for W11 Pack #1 review  
-**Cập nhật lần cuối:** 2026-06-23  
+**Cập nhật lần cuối:** 2026-06-25 (sync AI commit 86b32e7)  
 
 ## 1. Mục tiêu kiến trúc
 
@@ -104,7 +104,7 @@ Caption: CDO executor là điểm điều phối chính. AI chỉ đưa ra decis
 | Kubernetes sandbox | EKS/Kubernetes | Chạy sample workloads và namespaces tenant | Target chính của self-heal |
 | CDO Self-Heal Executor | Pod/Deployment trong EKS | Điều phối detect -> decide -> safety -> execute -> verify | CDO own |
 | Telemetry Collector | CloudWatch/Container Insights/Prometheus/OpenTelemetry | Thu logs, metrics, traces theo contract AI | CDO chuẩn hóa data trước khi gọi AI |
-| Optional Telemetry Buffer | Amazon SQS if CDO owns it | Buffer telemetry đã chuẩn hóa từ RE2/RE3 preprocessor hoặc runtime collector | Optional internal CDO design; AI contract mới chưa cung cấp SQS ARN |
+| Optional Telemetry Buffer | Amazon SQS (CDO internal buffer) | Buffer telemetry đã chuẩn hóa từ RE2/RE3 preprocessor hoặc runtime collector trước khi forward sang AI `/v1/detect` | CDO owns; telemetry contract xác nhận SQS là CDO-internal, AI không pull từ SQS |
 | AI Engine | ECS Fargate internal endpoint | Decision service do AI team own | Endpoint `https://ai-engine.tf-3.internal/` |
 | Safety Gate | Module trong executor | Validate tenant, namespace, confidence threshold, action allow-list, `allowed_namespaces`, blast-radius, `verify_policy` | Chặn unsafe action |
 | Idempotency Lock | DynamoDB conditional write | Chống execute trùng cùng `Idempotency-Key` | Khớp deployment contract AI |
@@ -137,18 +137,27 @@ CDO-02 consume AI API Contract như sau:
 
 | API | CDO usage |
 |---|---|
-| `POST /v1/detect` | Gửi telemetry/context để AI xác định anomaly |
-| `POST /v1/decide` | Nhận `pattern_type`, `action_plan[]`, `blast_radius_config`, `verify_policy` |
-| `POST /v1/verify` | Gửi post-action metrics để AI xác định success/regression |
+| `POST /v1/detect` | Gửi telemetry/context để AI xác định anomaly. Bắt buộc: `Idempotency-Key`, `X-Dry-Run-Mode` |
+| `POST /v1/decide` | Nhận `pattern_type`, `action_plan[]`, `blast_radius_config`, `verify_policy`, `cost_cap_exceeded` |
+| `POST /v1/verify` | Gửi post-action metrics để AI xác định success/regression. Bắt buộc: `Idempotency-Key`, `X-Dry-Run-Mode` |
 
 Headers/auth theo contract:
 
 ```text
 Authorization: IAM SigV4
-X-Tenant-Id: 6c8b4b2b-4d45-4209-a1b4-4b532d56a31c
-Idempotency-Key: UUID v4
-X-Correlation-Id: incident correlation id
+X-Tenant-Id: 6c8b4b2b-4d45-4209-a1b4-4b532d56a31c      ← confirmed chính thức
+Idempotency-Key: UUID v4 (bắt buộc 3 endpoints)
+X-Dry-Run-Mode: "true" hoặc "false" (bắt buộc 3 endpoints)
+X-Correlation-Id: UUID v4 (tùy chọn detect; bắt buộc decide/verify)
 ```
+
+SLA theo contract (cập nhật W11):
+
+| Endpoint | p99 latency | Rate limit |
+|---|---|---|
+| `/v1/detect` | < 300ms | 100 RPS/tenant |
+| `/v1/decide` | < 3000ms (LLM) / < 500ms (rule fallback) | 10 RPS/tenant |
+| `/v1/verify` | < 500ms | 10 RPS/tenant |
 
 Các action CDO sẽ hỗ trợ theo allow-list:
 
@@ -159,6 +168,17 @@ SCALE_REPLICAS
 ROLLOUT_UNDO
 ROTATE_SECRET
 ```
+
+**Xử lý `pattern_type` (bắt buộc):**
+
+| `pattern_type` | CDO action |
+|---|---|
+| `"urgent"` | Execute trực tiếp qua Kubernetes API sau safety gate pass (RTO < 60s) |
+| `"deferred"` | Tạo Git commit/PR để ArgoCD sync. **Không direct mutate Kubernetes** |
+
+**Xử lý `cost_cap_exceeded: true`:** AI đã chuyển sang rule-based fallback. CDO vẫn execute action plan nhưng phải log cảnh báo, thông báo team.
+
+**Telemetry DLQ:** Khi AI reject telemetry (400), CDO chuyển message vào Dead-Letter Queue để phân tích. Alert nếu tỷ lệ malformed > 0.5% trong 5 phút.
 
 W11 Pack #1 chỉ chốt design và contract alignment. Theo AI API Contract, RE2/RE3 Offline Simulation Mode chạy ở dạng **Mock Mode**: CDO ghi nhận action giả định đã thực hiện, rồi gửi `post_telemetry_window` từ dataset sang `/v1/verify`. Nếu trainer yêu cầu, CDO-02 sẽ bổ sung demo action thật trên Kubernetes sandbox ở W12.
 
@@ -216,6 +236,8 @@ Safety gate bắt buộc kiểm tra:
 | Verify plan | Bắt buộc có metric/log để verify sau action |
 | Idempotency | Không execute trùng cùng `Idempotency-Key`; ưu tiên DynamoDB conditional write |
 | AI confidence | Ngưỡng execute cần chốt với AI |
+| `pattern_type` routing | `"urgent"` → execute trực tiếp K8s sau safety pass; `"deferred"` → bắt buộc Git commit/PR path |
+| `cost_cap_exceeded` | Nếu `true`: log + notify team, vẫn execute nhưng không escalate cost thêm |
 | Failure fallback | AI 503/timeout -> escalate + audit, không execute mặc định |
 
 ## 9. Observability Design
@@ -238,7 +260,7 @@ Telemetry theo contract AI:
 | `application_log_event` | CloudWatch Logs parser with PII/secret scrubbing |
 | `distributed_trace_error_event` | OpenTelemetry/X-Ray/Jaeger |
 
-Với Offline Simulation Mode, nguồn chính là `metrics.csv`, `logs.csv`, `traces.csv` từ RE2/RE3; CDO preprocessor tính toán signal phái sinh, inject tenant UUID, rồi đưa vào executor/AI API path. Nếu dùng SQS, đây là buffer nội bộ của CDO chứ chưa phải integration contract với AI.
+Với Offline Simulation Mode, nguồn chính là `metrics.csv`, `logs.csv`, `traces.csv` từ RE2/RE3; CDO preprocessor tính toán signal phái sinh, inject tenant UUID, rồi đưa vào executor/AI API path. SQS là buffer nội bộ của CDO (đã được telemetry contract xác nhận); AI Engine không pull từ SQS - CDO dùng Forwarder/Worker để batch-push từ SQS sang `/v1/detect`.
 
 ## 10. Chiến Lược Scale
 
@@ -304,10 +326,10 @@ Mục tiêu T6 W11 là có skeleton/base IaC rõ ràng và commit evidence. Mứ
 
 ## 14. Open Items
 
-- Cần AI confirm boundary: AI chỉ trả `action_plan` hay AI cũng execute Kubernetes action.
 - Cần trainer confirm T6 yêu cầu infra chạy thật tới mức nào.
 - Offline Simulation Mode đã là Mock Mode theo contract AI; cần trainer confirm có cần bổ sung action thật trên sandbox không.
 - Cần chốt confidence threshold để CDO được execute action.
+- `pattern_type: "deferred"` yêu cầu ArgoCD/GitOps path; cần chốt ArgoCD có sẵn trong W12 hay dùng manual PR merge làm bằng chứng.
 
 ## Tài Liệu Liên Quan
 

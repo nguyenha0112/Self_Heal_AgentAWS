@@ -2,7 +2,7 @@
 
 **Doc owner:** CDO-02  
 **Trạng thái:** Draft cho W11/W12 deployment design alignment  
-**Last updated:** 2026-06-24  
+**Last updated:** 2026-06-25 (sync AI commit 86b32e7)  
 
 ## 1. Chiến lược IaC
 
@@ -137,11 +137,10 @@ CDO-02 đề xuất **ArgoCD** là công cụ GitOps ưu tiên cho tài nguyên 
 
 - Phù hợp với workload Kubernetes-centric.
 - Giúp tách rõ boundary:
-- **Terraform** provision AWS base infra
-- **ArgoCD** sync Kubernetes manifests và Helm releases
+  - **Terraform** provision AWS base infra
+  - **ArgoCD** sync Kubernetes manifests và Helm releases
 - Có khả năng quan sát drift và rollback theo Git revision.
-
-Trong capstone, nếu chưa có đủ thời gian để dựng ArgoCD đầy đủ, phần này vẫn nên được viết là **target deployment model** vì nó khớp nhất với angle K8s-heavy của CDO-02.
+- **Bắt buộc** cho `pattern_type: "deferred"` từ AI contract: khi AI trả deferred action plan, CDO tạo Git commit/PR và ArgoCD sync về cluster. Không direct mutate Kubernetes trong path này.
 
 ### 3.2 Cấu trúc repo / sync
 

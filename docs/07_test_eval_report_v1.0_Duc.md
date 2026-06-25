@@ -2,7 +2,7 @@
 
 **Doc owner:** CDO-02  
 **Trạng thái:** Draft cho W12 Pack #2 execution  
-**Cập nhật lần cuối:** 2026-06-24  
+**Cập nhật lần cuối:** 2026-06-25 (sync AI commit 86b32e7)  
 
 ## 1. Mục tiêu tài liệu
 
@@ -53,11 +53,12 @@ Các SLO dưới đây là target cho W12 Pack #2. Cột measured chỉ được
 | SLO | Target | Measured | Window | Pass/Fail |
 |---|---:|---:|---|---|
 | CDO executor availability trong simulation | >= 99.5% | TBD | >= 4h scenario window | TBD |
-| AI API call p99 do CDO observe | detect < 300ms, decide/verify < 500ms | TBD | Scenario run | TBD |
+| AI API call p99 do CDO observe | detect < 300ms; decide < 3000ms (LLM) / < 500ms (fallback); verify < 500ms | TBD | Scenario run | TBD |
 | End-to-end auto-heal latency | < 5 min cho safe restart/scale cases | TBD | Successful auto-resolve cases | TBD |
 | Audit write coverage | 100% incidents | TBD | Scenario run | TBD |
 | Unsafe action rate | 0% | TBD | Scenario run | TBD |
 | Tenant onboarding smoke test | < 30 min cho 2 tenants | TBD | `tenant-a`, `tenant-b` setup | TBD |
+| Rate limit compliance | detect <= 100 RPS; decide/verify <= 10 RPS per tenant | TBD | Scenario run | TBD |
 
 ### 4.1 SLO Breach Analysis Template
 
@@ -93,6 +94,8 @@ Nếu có SLO miss sau khi chạy test, điền bảng này để giải thích 
 | TC-13 | Dry-run failure | Kubernetes server-side dry-run fail | Deny execute | Không có real action sau dry-run fail |
 | TC-14 | Verify regression | Post-action metrics xấu hơn | Rollback hoặc escalate | Audit có rollback/escalation event |
 | TC-15 | Circuit breaker | Quá nhiều action fail trong thời gian ngắn | Stop automation | Các action tiếp theo bị deny tới khi breaker reset |
+| TC-16 | `pattern_type: deferred` routing | AI trả `pattern_type: "deferred"` (e.g. SCALE_REPLICAS) | CDO tạo Git commit/PR, **không** gọi K8s API trực tiếp | Không có K8s mutation, có Git commit/PR evidence, audit ghi `deferred_gitops_path` |
+| TC-17 | `cost_cap_exceeded: true` handling | AI `/v1/decide` trả `cost_cap_exceeded: true` | CDO log warning + notify, vẫn execute action plan theo safety gate | Audit ghi `cost_cap_exceeded_warning`, action executed bình thường |
 
 ## 6. Detailed Test Cases
 
