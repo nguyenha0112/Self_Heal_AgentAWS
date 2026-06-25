@@ -1,42 +1,48 @@
-CDO-02 Kubernetes Evidence Commands
-===================================
+CDO-02 Kubernetes Runtime Evidence Commands
+===========================================
 
-Current workstation status on 2026-06-25:
-- aws eks describe-cluster succeeded.
-- aws eks update-kubeconfig succeeded.
-- kubectl API requests timed out from this workstation, so live before/after pod output is pending.
+Runtime status:
+- EKS cluster is ACTIVE.
+- Public endpoint was temporarily enabled for workstation IP 14.224.236.94/32.
+- Managed node group cdo-default-ng is ACTIVE.
+- Node ip-10-0-2-195.ec2.internal is Ready.
+- podinfo is running in tenant-a as deployment/cdo-sample-api.
 
-Runbook to capture live evidence when Kubernetes API access is available:
+Commands used:
 
-1. Apply namespaces and sample workload:
+1. Check nodes:
+   kubectl get nodes -o wide
+
+2. Apply namespaces and sample workload:
    kubectl apply -f manifests/namespaces/platform.yaml
    kubectl apply -f manifests/namespaces/tenant-a.yaml
    kubectl apply -f manifests/namespaces/tenant-b.yaml
    kubectl apply -f manifests/workloads/tenant-a-sample-app.yaml
 
-2. Capture before state:
-   kubectl get ns tenant-a tenant-b platform --show-labels
+3. Capture workload state:
+   kubectl rollout status deployment/cdo-sample-api -n tenant-a --timeout=180s
    kubectl get deploy,pod,svc -n tenant-a -o wide
-   kubectl rollout status deployment/cdo-sample-api -n tenant-a --timeout=120s
+
+4. Capture app health, readiness and metrics:
    kubectl port-forward -n tenant-a svc/cdo-sample-api 9898:80 9797:9797
    curl http://127.0.0.1:9898/healthz
    curl http://127.0.0.1:9898/readyz
    curl http://127.0.0.1:9898/metrics
 
-3. Execute real safe action:
+5. Execute real safe action:
    kubectl rollout restart deployment/cdo-sample-api -n tenant-a
-   kubectl rollout status deployment/cdo-sample-api -n tenant-a --timeout=120s
+   kubectl rollout status deployment/cdo-sample-api -n tenant-a --timeout=180s
 
-4. Capture after state:
+6. Capture after state:
    kubectl get deploy,pod,svc -n tenant-a -o wide
    kubectl describe deployment cdo-sample-api -n tenant-a
+   kubectl logs -n tenant-a deployment/cdo-sample-api --tail=30
 
-5. Capture cross-tenant deny evidence in CDO safety gate:
-   Use decide-response with target namespace tenant-b while incident namespace is tenant-a.
-   Expected result: denied_cross_tenant before kubectl mutation.
+Observed restart evidence:
+- Before: pod/cdo-sample-api-7c8f845788-g2tmj Running
+- After: pod/cdo-sample-api-78f74d7696-6gtql Running
+- Deployment revision: 2
+- Rollout status: successfully rolled out
 
-Expected live evidence:
-- Before pod name and creation timestamp.
-- Rollout restart annotation update on deployment.
-- After pod name or restart timestamp changes.
-- Rollout status returns success.
+Main human-readable report:
+- evidence/w11-ai-contract-sync/EKS_RUNTIME_EVIDENCE_REPORT.md

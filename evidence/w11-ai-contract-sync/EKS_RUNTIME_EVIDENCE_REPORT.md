@@ -1,23 +1,41 @@
-# CDO-02 EKS Runtime Evidence Report
+# Báo Cáo Evidence Runtime Trên EKS - CDO-02
 
-## 1. Executive Summary
+## 1. Tóm Tắt
 
-CDO-02 has deployed a real public Kubernetes demo application on AWS EKS and captured runtime evidence for the AI integration handoff.
+CDO-02 đã host một ứng dụng public thật lên AWS EKS và đã thu evidence runtime để nộp trainer/gửi AI team.
 
-This evidence proves:
+Evidence này chứng minh:
 
-- The EKS cluster is reachable from the CDO workstation after enabling a restricted public endpoint.
-- A real managed node group is running.
-- Namespaces `tenant-a`, `tenant-b`, and `platform` exist.
-- The public app `podinfo` is running in `tenant-a`.
-- The app exposes real health, readiness, logs, and Prometheus metrics.
-- CDO executed a real Kubernetes `rollout restart` action and verified the rollout.
+- EKS cluster `cdo-eks-cluster-dev` đang chạy thật trên AWS.
+- CDO đã tạo managed node group thật để có worker node chạy pod.
+- Các namespace `tenant-a`, `tenant-b`, `platform` đã tồn tại trên Kubernetes.
+- Ứng dụng public `podinfo` đã chạy trong namespace `tenant-a`.
+- Ứng dụng có health endpoint, readiness endpoint, logs và Prometheus metrics thật.
+- CDO đã thực hiện action Kubernetes thật: `rollout restart deployment/cdo-sample-api`.
+- Sau restart, Kubernetes rollout thành công và pod mới thay thế pod cũ.
 
-This is not only a mock JSON evidence pack. The workload is running on AWS EKS.
+Đây là evidence runtime thật trên EKS, không chỉ là mock payload hoặc tài liệu thiết kế.
 
-## 2. AWS/EKS Infrastructure Evidence
+## 2. Làm Rõ Về "Host App"
 
-Cluster:
+Trong phần này có 2 loại host khác nhau, cần phân biệt rõ:
+
+| Hạng mục | Mục đích | Có phải evidence runtime không? |
+|---|---|---|
+| GitHub Pages site | Trang web giải thích cho AI/trainer hiểu app demo và mapping | Không |
+| Podinfo chạy trên AWS EKS | Workload thật để lấy logs, metrics, health check và rollout evidence | Có |
+
+Link GitHub Pages chỉ là trang giới thiệu/handoff:
+
+```text
+https://nguyenha0112.github.io/cdo-podinfo-demo-site/
+```
+
+Evidence runtime chính là app `podinfo` đã được deploy lên EKS trong namespace `tenant-a`.
+
+## 3. Evidence AWS/EKS
+
+Thông tin cluster:
 
 ```text
 Cluster Name : cdo-eks-cluster-dev
@@ -27,7 +45,7 @@ Status       : ACTIVE
 AWS Account  : 938145531618
 ```
 
-EKS endpoint access was updated for the demo:
+Ban đầu EKS API endpoint là private-only nên máy local không thể `kubectl` vào cluster. Để lấy evidence demo, CDO mở public endpoint có giới hạn IP:
 
 ```text
 endpointPublicAccess  = true
@@ -35,13 +53,13 @@ endpointPrivateAccess = true
 publicAccessCidrs     = ["14.224.236.94/32"]
 ```
 
-Reason:
+Điểm an toàn:
 
-- The cluster was originally private-only.
-- Local `kubectl` could not reach the Kubernetes API.
-- CDO temporarily allowed the current workstation IP only, using `/32`, instead of opening the endpoint broadly.
+- Không mở public endpoint cho toàn internet.
+- Chỉ cho phép IP workstation hiện tại bằng `/32`.
+- Với demo chính thức, nên dùng VPN/bastion/private runner hoặc mở tạm IP trainer rồi đóng lại sau khi demo.
 
-Managed node group created:
+Managed node group đã tạo:
 
 ```text
 Nodegroup Name : cdo-default-ng
@@ -53,16 +71,16 @@ Max Size       : 2
 Status         : ACTIVE
 ```
 
-Node evidence:
+Node đang Ready:
 
 ```text
 NAME                         STATUS   ROLES    AGE     VERSION                INTERNAL-IP   EXTERNAL-IP   OS-IMAGE         KERNEL-VERSION                  CONTAINER-RUNTIME
 ip-10-0-2-195.ec2.internal   Ready    <none>   3m51s   v1.30.14-eks-ecaa3a6   10.0.2.195    <none>        Amazon Linux 2   5.10.245-245.983.amzn2.x86_64   containerd://1.7.29
 ```
 
-## 3. Kubernetes Namespace Evidence
+## 4. Evidence Namespace Multi-Tenant
 
-CDO applied the required namespaces for multi-tenant isolation:
+CDO đã apply 3 namespace:
 
 ```text
 kubectl apply -f manifests/namespaces/platform.yaml
@@ -70,7 +88,7 @@ kubectl apply -f manifests/namespaces/tenant-a.yaml
 kubectl apply -f manifests/namespaces/tenant-b.yaml
 ```
 
-Observed namespaces:
+Kết quả:
 
 ```text
 NAME       STATUS   AGE     LABELS
@@ -79,42 +97,48 @@ tenant-b   Active   2m31s   kubernetes.io/metadata.name=tenant-b,tenant_id=tenan
 platform   Active   2m37s   kubernetes.io/metadata.name=platform,tenant_id=platform
 ```
 
-## 4. Real App Hosted On EKS
+Ý nghĩa:
 
-CDO does not use a temporary echo container for the live demo. The hosted app is `podinfo`, a public Kubernetes demo microservice.
+- `tenant-a` là namespace chạy workload demo chính.
+- `tenant-b` dùng để chứng minh boundary/safety gate không được mutate nhầm tenant.
+- `platform` dành cho thành phần platform/CDO executor trong thiết kế.
 
-Public references:
+## 5. Ứng Dụng Thật Đã Host Trên EKS
+
+CDO không dùng echo container tạm bợ cho demo runtime. Workload demo là `podinfo`, một ứng dụng Kubernetes demo public.
+
+Nguồn public:
 
 - GitHub: https://github.com/stefanprodan/podinfo
 - Docker Hub: https://hub.docker.com/r/stefanprodan/podinfo
-- Image used by CDO: `ghcr.io/stefanprodan/podinfo:6.14.0`
+- Image đang dùng: `ghcr.io/stefanprodan/podinfo:6.14.0`
 
-CDO manifest:
+Manifest trong repo:
 
 ```text
 manifests/workloads/tenant-a-sample-app.yaml
 ```
 
-Topology mapping for AI:
+Mapping cho AI:
 
 ```text
 checkout-svc -> tenant-a -> deployment/cdo-sample-api -> container/podinfo
 ```
 
-Deployment command:
+Lệnh deploy:
 
 ```text
 kubectl apply -f manifests/workloads/tenant-a-sample-app.yaml
 kubectl rollout status deployment/cdo-sample-api -n tenant-a --timeout=180s
 ```
 
-Rollout result:
+Kết quả rollout:
 
 ```text
 deployment "cdo-sample-api" successfully rolled out
 ```
 
-Runtime workload evidence:
+Kết quả workload:
 
 ```text
 NAME                             READY   UP-TO-DATE   AVAILABLE   AGE     CONTAINERS   IMAGES                                SELECTOR
@@ -127,9 +151,9 @@ NAME                     TYPE        CLUSTER-IP       EXTERNAL-IP   PORT(S)     
 service/cdo-sample-api   ClusterIP   172.20.215.165   <none>        80/TCP,9797/TCP   2m19s   app=cdo-sample-api
 ```
 
-## 5. Health, Readiness, Metrics, And Logs Evidence
+## 6. Evidence Health, Readiness, Metrics Và Logs
 
-CDO used port-forward to query the live EKS service:
+CDO dùng port-forward để gọi service đang chạy trong EKS:
 
 ```text
 kubectl port-forward -n tenant-a svc/cdo-sample-api 9898:80 9797:9797
@@ -173,43 +197,43 @@ Application logs:
 {"level":"info","ts":"2026-06-25T01:46:36.527Z","caller":"http/server.go:273","msg":"Starting HTTP Server.","addr":":9898"}
 ```
 
-Why this matters for AI:
+Ý nghĩa với AI/CDO:
 
-- `/healthz` and `/readyz` can be used as post-action verification signals.
-- `/metrics` provides real Prometheus-format runtime metrics.
-- Logs prove the application started inside the EKS pod.
-- These signals can populate `/v1/detect` and `/v1/verify` test payloads.
+- `/healthz` và `/readyz` dùng để verify sau action.
+- `/metrics` cung cấp telemetry format Prometheus thật.
+- Logs chứng minh app đã start trong pod trên EKS.
+- Các dữ liệu này có thể đưa vào flow `/v1/detect` và `/v1/verify`.
 
-## 6. Real Kubernetes Self-Heal Action Evidence
+## 7. Evidence Action Self-Heal Thật
 
-CDO executed a real Kubernetes restart action:
+CDO đã chạy action Kubernetes thật:
 
 ```text
 kubectl rollout restart deployment/cdo-sample-api -n tenant-a
 kubectl rollout status deployment/cdo-sample-api -n tenant-a --timeout=180s
 ```
 
-Action result:
+Kết quả:
 
 ```text
 deployment.apps/cdo-sample-api restarted
 deployment "cdo-sample-api" successfully rolled out
 ```
 
-Before restart:
+Trước restart:
 
 ```text
 pod/cdo-sample-api-7c8f845788-g2tmj   1/1   Running   0   42s   10.0.2.250   ip-10-0-2-195.ec2.internal
 ```
 
-After restart:
+Sau restart:
 
 ```text
 pod/cdo-sample-api-78f74d7696-6gtql   1/1   Running       0   8s    10.0.2.89    ip-10-0-2-195.ec2.internal
 pod/cdo-sample-api-7c8f845788-g2tmj   1/1   Terminating   0   58s   10.0.2.250   ip-10-0-2-195.ec2.internal
 ```
 
-Deployment describe evidence:
+Deployment describe:
 
 ```text
 Name:                   cdo-sample-api
@@ -224,30 +248,30 @@ OldReplicaSets:         cdo-sample-api-7c8f845788 (0/0 replicas created)
 NewReplicaSet:          cdo-sample-api-78f74d7696 (1/1 replicas created)
 ```
 
-Interpretation:
+Kết luận:
 
-- The pod name changed from `cdo-sample-api-7c8f845788-g2tmj` to `cdo-sample-api-78f74d7696-6gtql`.
-- The deployment revision increased to `2`.
-- Kubernetes reports `1 available | 0 unavailable`.
-- This proves CDO can execute the safe action `RESTART_DEPLOYMENT` on the EKS sandbox.
+- Pod đã đổi từ `cdo-sample-api-7c8f845788-g2tmj` sang `cdo-sample-api-78f74d7696-6gtql`.
+- Deployment revision tăng lên `2`.
+- Kubernetes báo `1 available | 0 unavailable`.
+- CDO đã chứng minh được action `RESTART_DEPLOYMENT` chạy thật trên EKS sandbox.
 
-## 7. AI Integration Meaning
+## 8. Ý Nghĩa Với Flow AI-CDO
 
-This runtime evidence supports the following AI-CDO contract flow:
+Evidence này chứng minh được flow tích hợp mục tiêu:
 
 ```text
-CDO telemetry/log/metric collection
+CDO thu telemetry/log/metric
 -> POST /v1/detect
--> AI returns anomaly + confidence
+-> AI trả anomaly + confidence
 -> POST /v1/decide
--> AI returns action_plan: RESTART_DEPLOYMENT
--> CDO safety gate validates tenant-a and deployment/cdo-sample-api
--> CDO executes Kubernetes rollout restart
--> CDO checks rollout status, healthz, readyz, metrics, logs
+-> AI trả action_plan: RESTART_DEPLOYMENT
+-> CDO safety gate kiểm tra tenant-a và deployment/cdo-sample-api
+-> CDO execute rollout restart trên Kubernetes
+-> CDO verify bằng rollout status, /healthz, /readyz, /metrics, logs
 -> POST /v1/verify
 ```
 
-AI should target the action by namespace and deployment:
+AI nên trả target theo namespace và deployment:
 
 ```json
 {
@@ -259,11 +283,9 @@ AI should target the action by namespace and deployment:
 }
 ```
 
-AI should not target an individual `pod_name`, because CDO controls safe restart at Deployment level.
+AI không nên target theo `pod_name`, vì pod là tài nguyên thay đổi sau rollout. CDO execute an toàn ở cấp Deployment.
 
-## 8. What To Send AI Team
-
-Send AI team these files:
+## 9. File Nên Gửi Cho AI Team
 
 ```text
 evidence/w11-ai-contract-sync/EKS_RUNTIME_EVIDENCE_REPORT.md
@@ -273,35 +295,26 @@ evidence/w11-ai-contract-sync/decide-response.json
 evidence/w11-ai-contract-sync/verify-request.json
 ```
 
-Short message:
+Tin nhắn mẫu gửi AI:
 
 ```text
-CDO has hosted a real public app on AWS EKS using podinfo.
+CDO đã host app public podinfo thật trên AWS EKS.
 
 Runtime mapping:
 checkout-svc -> tenant-a -> deployment/cdo-sample-api -> container/podinfo
 
-Evidence includes:
+Evidence gồm:
 - EKS node Ready
 - podinfo deployment Running
 - /healthz OK
 - /readyz OK
-- /metrics Prometheus output
+- /metrics có Prometheus output
 - pod logs
-- real rollout restart and successful rollout status
+- rollout restart thật và rollout status thành công
 
-Please confirm the topology graph format and return AI action_plan targets by namespace + deployment.
+Nhờ AI confirm topology graph format và trả action_plan target theo namespace + deployment.
 ```
 
-## 9. Current Caveat
+## 10. Ghi Chú Vận Hành
 
-The EKS public endpoint was opened only for the current workstation IP:
-
-```text
-14.224.236.94/32
-```
-
-For a final demo environment, CDO should either:
-
-- keep endpoint private and run commands from VPN/bastion/private runner, or
-- temporarily allow the trainer/demo operator IP with `/32`, then close it after evidence capture.
+Node group `cdo-default-ng` đang chạy `t3.medium` để phục vụ demo. Sau khi nộp evidence hoặc demo xong, nếu cần tiết kiệm chi phí thì có thể scale desired size về `0` hoặc xóa node group theo quyết định của team.

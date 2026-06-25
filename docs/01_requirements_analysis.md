@@ -44,7 +44,7 @@ CDO-02 sẽ phụ trách các phần sau:
 | Deployment/IaC | Terraform skeleton cho VPC, EKS, observability |
 | AI integration | Consume 3 AI contracts, gọi AI endpoint theo schema đã ký |
 
-## 4. Out Of Scope
+## 4. Ngoài Phạm Vi
 
 CDO-02 không làm các phần sau trong scope capstone:
 
@@ -58,14 +58,14 @@ CDO-02 không làm các phần sau trong scope capstone:
 - Không làm cross-region replication.
 - Không làm mTLS; bearer token/JWT là đủ cho capstone.
 
-## 5. Differentiation Angle
+## 5. Hướng Khác Biệt Của CDO-02
 
 - **Angle chọn:** K8s-heavy / Kubernetes Workflow Orchestration.
 - **Why this angle:** TF3 là bài toán self-healing cho microservices chạy trên Kubernetes/EKS, nên CDO-02 chọn Kubernetes-native workflow để thao tác trực tiếp với workload, enforce RBAC theo namespace, kiểm soát blast-radius, dry-run, rollback, verify và audit. Trục tối ưu chính là **reliability** và **operational control**.
 - **Trade-off chấp nhận:** Chi phí và độ phức tạp vận hành cao hơn serverless-first, nhưng đổi lại sát đề bài hơn, dễ chứng minh tenant isolation/RBAC hơn và phù hợp với self-heal trên Kubernetes workload.
 - **Locked T3 W11:** 2026-06-23.
 
-## 6. Target Patterns / Dataset Scope (cần bàn với AI)
+## 6. Pattern Mục Tiêu / Phạm Vi Dataset (cần bàn với AI)
 
 Theo contract hiện tại của AI, phạm vi dữ liệu được căn theo **RE2/RE3 dataset** và hệ thống mẫu **Online Boutique**. Vì vậy CDO-02 cần align pattern demo với các signals/actions mà AI contract đã định nghĩa, thay vì tự đặt pattern theo tên quá chung chung.
 
@@ -90,7 +90,7 @@ CDO-02 đề xuất 2 patterns design-only:
 
 Danh sách pattern cuối cùng cần được confirm với AI team trước khi ký contract.
 
-## 7. Infra Non-Functional Requirements
+## 7. Yêu Cầu Phi Chức Năng Cho Infra
 
 | NFR | Target | Justification |
 |---|---|---|
@@ -104,7 +104,7 @@ Danh sách pattern cuối cùng cần được confirm với AI team trước kh
 | Observability | Logs + metrics + traces theo AI contract | Cần đủ dữ liệu cho detect/decide/verify và trace end-to-end |
 | Cost control | W11 draft estimate, W12 refine with evidence | Tránh over-architecting |
 
-## 8. Clarifications Needed From Client/Trainer
+## 8. Điểm Cần Làm Rõ Với Client/Trainer
 
 Các điểm dưới đây cần hỏi trainer/mentor đóng vai client trước khi chốt final, vì nếu tự giả định sai thì có thể ảnh hưởng thiết kế W12.
 
@@ -121,7 +121,7 @@ Các điểm dưới đây cần hỏi trainer/mentor đóng vai client trước
 
 Trong khi chờ trainer/client confirm, CDO-02 sẽ ghi các điểm này là **assumption**, không xem là quyết định cuối cùng.
 
-## 9. AI-CDO Contract Dependencies (cần bàn với AI)
+## 9. Phụ Thuộc Contract Giữa AI Và CDO (cần bàn với AI)
 
 AI team đã publish 3 contracts tại repo `AIops-g4/Capstone-Phase-2-Code/tf-3/ai/contracts`. CDO-02 cập nhật requirement theo các điểm chính dưới đây.
 
@@ -252,7 +252,7 @@ CDO-02 cần chốt lại với AI:
 - AI có publish enum `suspected_fault_type` không?
 - Offline Simulation Mode theo AI contract là Mock Mode; CDO cần xác nhận với AI/trainer evidence W12 sẽ ưu tiên mock action theo dataset hay bổ sung action thật trên sandbox.
 
-## 10. Assumptions
+## 10. Giả Định
 
 - Team chính thức là **CDO-02**.
 - CDO-02 đã chốt angle **K8s-heavy / Kubernetes Workflow Orchestration**.
@@ -263,7 +263,7 @@ CDO-02 cần chốt lại với AI:
 - Idempotency lock theo deployment contract AI dùng DynamoDB conditional write hoặc Redis lock TTL 5 phút; CDO-02 ưu tiên DynamoDB để khớp AWS-native design.
 - CDO-02 có thể dùng mock/skeleton AI endpoint từ T6 W11 đến trước integration session W12.
 
-## 11. Open Questions (cần bàn với AI / trainer)
+## 11. Câu Hỏi Mở (cần bàn với AI / trainer)
 
 Các câu hỏi còn lại cần chốt với AI team hoặc trainer/mentor.
 
@@ -283,11 +283,11 @@ Các câu hỏi còn lại cần chốt với AI team hoặc trainer/mentor.
 2. Trainer có yêu cầu region khác `us-east-1` không?
 3. Trainer có yêu cầu base infra T6 phải chạy thật hoàn toàn không, hay skeleton + plan + commit evidence được chấp nhận nếu AWS setup chưa sẵn sàng?
 
-## 12. Pack #1 Completion Checklist
+## 12. Checklist Hoàn Thành Pack #1
 
 - [ ] CDO angle locked.
 - [ ] Build/design-only patterns confirmed with AI.
 - [ ] AI contract open questions documented.
 - [ ] NFR table reviewed by team.
-- [ ] Assumptions confirmed or marked as risk.
+- [ ] Giả định đã được xác nhận hoặc đánh dấu là rủi ro.
 - [ ] File committed as Pack #1 evidence.

@@ -9,29 +9,32 @@ Cluster ARN  : arn:aws:eks:us-east-1:938145531618:cluster/cdo-eks-cluster-dev
 AWS Account  : 938145531618
 AWS Caller   : arn:aws:iam::938145531618:user/terraform-cli-user
 
-Commands executed from CDO workstation:
-- aws eks describe-cluster --name cdo-eks-cluster-dev --region us-east-1
-- aws sts get-caller-identity
-- aws eks update-kubeconfig --name cdo-eks-cluster-dev --region us-east-1
+Endpoint access used for evidence:
+- endpointPublicAccess: true
+- endpointPrivateAccess: true
+- publicAccessCidrs: 14.224.236.94/32
 
-Kubeconfig update result:
-- Context updated: arn:aws:eks:us-east-1:938145531618:cluster/cdo-eks-cluster-dev
+Node group evidence:
+- Nodegroup Name: cdo-default-ng
+- Instance Type: t3.medium
+- Desired Size: 1
+- Min Size: 1
+- Max Size: 2
+- Status: ACTIVE
 
-Kubernetes API validation status:
-- kubectl requests timed out from this workstation after kubeconfig update.
-- Root cause confirmed by EKS config:
-  - endpointPublicAccess: false
-  - endpointPrivateAccess: true
-  - securityGroupIds: sg-07527c617eb81046c
-  - subnets: subnet-05426b071cc2319a4, subnet-074228f8a3906b261, subnet-06d7131f24bd2070a
-- This means live kubectl evidence must be captured from inside the VPC path, such as VPN, bastion, CloudShell/VPC-attached runner, or a CI runner with private subnet reachability.
-- Evidence is therefore split into:
-  1. Confirmed AWS/EKS control-plane evidence above.
-  2. Ready-to-run Kubernetes workload/action evidence commands in README.md.
+Kubernetes runtime evidence:
+- Node Ready: ip-10-0-2-195.ec2.internal
+- Namespaces Active: tenant-a, tenant-b, platform
+- Workload Deployment: tenant-a/cdo-sample-api
+- Container Image: ghcr.io/stefanprodan/podinfo:6.14.0
+- Service: tenant-a/cdo-sample-api
+- Runtime checks captured:
+  - /healthz OK
+  - /readyz OK
+  - /metrics Prometheus output
+  - pod logs
+  - rollout restart success
 
-Components expected from IaC/manifests:
-- VPC & Private/Public Subnets (NAT Gateway Enabled)
-- EKS Control Plane v1.30
-- Default Managed Node Group (t3.medium)
-- Kubernetes Namespaces: tenant-a, tenant-b, platform
-- Observability Base: CloudWatch Logs
+Main report:
+- evidence/w11-ai-contract-sync/EKS_RUNTIME_EVIDENCE_REPORT.md
+=========================================

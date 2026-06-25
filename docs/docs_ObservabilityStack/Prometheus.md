@@ -1,6 +1,6 @@
-# Prometheus - PoC Report for Self-Heal Engine
+# Prometheus - Báo Cáo PoC Cho Self-Heal Engine
 
-## 1. Executive Summary
+## 1. Tóm Tắt
 
 Trong PoC Self-Heal Engine, Prometheus là thành phần thu thập và chuẩn hóa metrics từ EKS sandbox cluster. Metrics từ Prometheus được dùng cho 3 mục tiêu chính:
 
@@ -19,7 +19,7 @@ EKS Workloads -> Prometheus -> Alertmanager -> Webhook Sink -> Mock/AI Engine
  Kubernetes Metrics / Events
 ```
 
-## 2. PoC Scope
+## 2. Phạm Vi PoC
 
 Phạm vi Prometheus trong PoC M6:
 
@@ -38,7 +38,7 @@ Ngoài phạm vi PoC:
 - Real PagerDuty/OpsGenie integration.
 - Prometheus tự gọi trực tiếp AI Engine để execute action.
 
-## 3. Why Prometheus
+## 3. Lý Do Chọn Prometheus
 
 Prometheus phù hợp với PoC này vì:
 
@@ -50,14 +50,14 @@ Prometheus phù hợp với PoC này vì:
 
 Các lựa chọn khác đã cân nhắc:
 
-| Option | Pros | Cons | Decision |
+| Lựa chọn | Ưu điểm | Nhược điểm | Quyết định |
 |---|---|---|---|
 | Prometheus + Alertmanager | Kubernetes-native, mạnh về metrics/alerts, dễ demo | Cần quản lý rule/query | Chọn cho PoC |
 | CloudWatch Container Insights only | AWS-managed, ít vận hành | Alert flow sang AI/webhook kém linh hoạt hơn | Không chọn làm core |
 | Datadog/New Relic | Nhanh, UI mạnh | Phụ thuộc SaaS, cost và credential ngoài scope | Không chọn cho PoC |
 | Custom metrics collector | Kiểm soát cao | Tốn thời gian, rủi ro cao | Không chọn |
 
-## 4. Proposed Architecture
+## 4. Kiến Trúc Đề Xuất
 
 ```mermaid
 flowchart LR

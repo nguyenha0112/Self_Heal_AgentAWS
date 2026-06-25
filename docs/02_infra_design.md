@@ -55,7 +55,7 @@ AI = decide
 CDO = validate + execute + verify + audit
 ```
 
-## 3. Architecture Diagram
+## 3. Sơ Đồ Kiến Trúc
 
 ```mermaid
 flowchart LR
@@ -97,7 +97,7 @@ flowchart LR
 
 Caption: CDO executor là điểm điều phối chính. AI chỉ đưa ra decision/action plan theo contract. CDO executor enforce safety gate, gọi Kubernetes API khi action được phép, sau đó verify và ghi audit.
 
-## 4. Component Table
+## 4. Bảng Thành Phần
 
 | Component | Service/Technology | Vai trò | Ghi chú |
 |---|---|---|---|
@@ -113,7 +113,7 @@ Caption: CDO executor là điểm điều phối chính. AI chỉ đưa ra decis
 | Metrics | Prometheus-compatible / CloudWatch Metrics | Error rate, latency, memory, restart count | Dùng cho detect/verify |
 | Traces | OpenTelemetry -> X-Ray/Jaeger | Trace lỗi liên service | Theo contract AI, triển khai W12 nếu kịp |
 
-## 5. Main Workflow
+## 5. Luồng Xử Lý Chính
 
 ```text
 1. Alert source hoặc scenario injector tạo incident.
@@ -240,7 +240,7 @@ Telemetry theo contract AI:
 
 Với Offline Simulation Mode, nguồn chính là `metrics.csv`, `logs.csv`, `traces.csv` từ RE2/RE3; CDO preprocessor tính toán signal phái sinh, inject tenant UUID, rồi đưa vào executor/AI API path. Nếu dùng SQS, đây là buffer nội bộ của CDO chứ chưa phải integration contract với AI.
 
-## 10. Scaling Strategy
+## 10. Chiến Lược Scale
 
 Scaling trong Pack #1 được thiết kế ở mức khả thi cho W12 demo, không phải production blueprint.
 
@@ -259,7 +259,7 @@ Nguyên tắc scale:
 - Mọi scale action phải có `verify_policy`.
 - Nếu AI confidence thấp hoặc verify signal thiếu, CDO escalate thay vì scale.
 
-## 11. Failure Modes And Recovery
+## 11. Failure Modes Và Cách Khôi Phục
 
 Phần này liệt kê các lỗi có thể xảy ra trong quá trình self-heal và cách CDO xử lý. Mục tiêu là khi có lỗi, hệ thống fail-safe: **không execute bừa**, mà deny/escalate/audit.
 
@@ -272,7 +272,7 @@ Phần này liệt kê các lỗi có thể xảy ra trong quá trình self-heal
 | Verify regression | `/v1/verify` trả regression | Rollback/escalate |
 | Audit writer fail | S3/CloudWatch write error | Stop execution hoặc mark incident unsafe |
 
-## 12. Alternatives Considered
+## 12. Các Phương Án Đã Cân Nhắc
 
 | Option | Pros | Cons | Decision |
 |---|---|---|---|
@@ -309,13 +309,13 @@ Mục tiêu T6 W11 là có skeleton/base IaC rõ ràng và commit evidence. Mứ
 - Offline Simulation Mode đã là Mock Mode theo contract AI; cần trainer confirm có cần bổ sung action thật trên sandbox không.
 - Cần chốt confidence threshold để CDO được execute action.
 
-## Related Documents
+## Tài Liệu Liên Quan
 
 - `01_requirements_analysis.md`
 - `03_security_design.md`
 - `08_adrs.md`
 
-## 15. W11 AI Contract Sync Evidence - 2026-06-25
+## 15. Evidence Đồng Bộ AI Contract W11 - 2026-06-25
 
 CDO-02 aligned this design with AI repo commit `f0248ce667fa77cd5cbe1abc0d39ef6e81b321c9`.
 
@@ -329,19 +329,22 @@ Contract changes CDO must enforce:
 - Telemetry support now includes the original signals plus `pod_oom_event`, `service_unhealthy`, `queue_backlog`, `service_throughput_rps`, `container_restart_count`, `secret_expiry_warning`, and `db_connection_pool_saturation`.
 - Topology mapping must be explicit: service -> namespace -> deployment.
 
-Evidence package:
+Gói evidence:
 
 ```text
 evidence/w11-ai-contract-sync/
 ```
 
-Current real environment evidence:
+Evidence môi trường thật hiện tại:
 
 - AWS account `938145531618` can describe EKS cluster `cdo-eks-cluster-dev`.
 - Cluster is ACTIVE, Kubernetes version `1.30`, region `us-east-1`.
 - Kubeconfig was updated for the EKS context.
-- From this workstation, `kubectl` calls timed out because the EKS API endpoint is private-only: `endpointPublicAccess=false`, `endpointPrivateAccess=true`.
-- Live pod before/after evidence must be captured from inside the VPC path, such as VPN, bastion, CloudShell/VPC-attached runner, or CI runner with private subnet reachability.
+- CDO temporarily enabled public endpoint access for the workstation IP only: `14.224.236.94/32`.
+- Managed node group `cdo-default-ng` is ACTIVE with one `t3.medium` node.
+- Namespace `tenant-a`, `tenant-b`, and `platform` were applied successfully.
+- Public app `podinfo` is running on EKS as `deployment/cdo-sample-api` in namespace `tenant-a`.
+- CDO captured runtime evidence for `/healthz`, `/readyz`, `/metrics`, pod logs, and a real `rollout restart`.
 
 CDO added sample workload manifest for the safe live action demo:
 
@@ -350,6 +353,12 @@ manifests/workloads/tenant-a-sample-app.yaml
 ```
 
 The workload uses the public `stefanprodan/podinfo` Kubernetes demo app, which provides health/readiness endpoints and Prometheus metrics. CDO maps it as `checkout-svc -> tenant-a -> deployment/cdo-sample-api -> container/podinfo`.
+
+Main evidence report:
+
+```text
+evidence/w11-ai-contract-sync/EKS_RUNTIME_EVIDENCE_REPORT.md
+```
 
 The intended real action demo is:
 

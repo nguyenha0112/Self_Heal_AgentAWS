@@ -4,7 +4,7 @@
 **Trạng thái:** Ready for W11 Pack #1 review  
 **Cập nhật lần cuối:** 2026-06-23  
 
-## 1. Security Goals
+## 1. Mục Tiêu Bảo Mật
 
 Mục tiêu bảo mật của CDO-02 là cho phép self-heal tự động nhưng không gây unsafe action trên Kubernetes. AI có thể đề xuất action, nhưng mọi thao tác mutate workload phải đi qua CDO safety gate, RBAC, dry-run, rollback/verify và audit.
 
@@ -62,9 +62,9 @@ Thì CDO phải:
 
 Đây là lý do CDO-02 không để AI tự execute trực tiếp.
 
-## 3. Network Security
+## 3. Bảo Mật Network
 
-### 3.1 Network Layout
+### 3.1 Sơ Đồ Network
 
 ```mermaid
 graph TB
@@ -89,7 +89,7 @@ graph TB
     EXEC --> SM
 ```
 
-### 3.2 Network Rules
+### 3.2 Quy Tắc Network
 
 - AI endpoint là internal endpoint, không public Internet.
 - CDO executor gọi AI qua HTTPS và IAM SigV4.
@@ -97,7 +97,7 @@ graph TB
 - Audit/log traffic đi tới CloudWatch và S3.
 - Nếu cần NAT/VPC endpoints, ưu tiên VPC endpoints cho S3, CloudWatch, Secrets Manager để giảm public exposure.
 
-## 4. IAM And Authentication
+## 4. IAM Và Authentication
 
 IAM/Auth trả lời câu hỏi: service nào được gọi service nào. Với contract AI hiện tại, CDO executor gọi AI bằng IAM SigV4 và tenant UUID `6c8b4b2b-4d45-4209-a1b4-4b532d56a31c` pending AI confirmation.
 
@@ -225,7 +225,7 @@ Storage target theo contract AI: **S3 Object Lock Compliance Mode**, retention t
 - Encryption at rest dùng S3 SSE-KMS nếu có thể.
 - Encryption in transit dùng HTTPS/TLS.
 
-## 10. Failure And Abuse Cases
+## 10. Failure Và Abuse Cases
 
 Phần này liệt kê các tình huống nguy hiểm và control tương ứng. Mục tiêu chung là fail-safe: khi không chắc thì không execute.
 
@@ -240,7 +240,7 @@ Phần này liệt kê các tình huống nguy hiểm và control tương ứng.
 | Executor bị lỗi giữa action | Verify/rollback/escalate theo trạng thái audit |
 | Secret bị lộ trong log | Redaction + không log sensitive headers |
 
-## 11. Open Questions
+## 11. Câu Hỏi Mở
 
 - Confirm tenant UUID chính thức của CDO-02 với AI.
 - Confirm confidence threshold, `ROTATE_SECRET` policy, `suspected_fault_type` enum và SQS ownership nếu còn dùng.
@@ -248,7 +248,7 @@ Phần này liệt kê các tình huống nguy hiểm và control tương ứng.
 - Traces có bắt buộc phải triển khai đầy đủ trong W12 demo không?
 - Offline Simulation Mode đã là Mock Mode theo AI contract; trainer có cần thêm bằng chứng action thật trên Kubernetes sandbox không?
 
-## Related Documents
+## Tài Liệu Liên Quan
 
 - `01_requirements_analysis.md`
 - `02_infra_design.md`

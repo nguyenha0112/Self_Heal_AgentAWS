@@ -1,6 +1,6 @@
 # M6 – IaC: Observability Stack Flow (EKS)
 
-File M6-IaC:_Observability_v1.0.md Draft. Đây là tài liệu sơ bộ, một số nội dung có thể thay đổi khi có thêm thông tin từ dự án. Hiện tại tài liệu chỉ phàn ánh đề xuất ban đầu.
+File M6-IaC_Observability_v1.0.md là bản draft. Đây là tài liệu sơ bộ, một số nội dung có thể thay đổi khi có thêm thông tin từ dự án. Hiện tại tài liệu chỉ phản ánh đề xuất ban đầu.
 <br>Time: 23/06/26
 <br><br>
 ![Observability](./picture/Observability_overallFlow.png)<br>
@@ -17,7 +17,7 @@ Triển khai một Observability Stack trên Amazon EKS nhằm:
 
 ---
 
-# 2. Thành phần kiến trúc
+## 2. Thành phần kiến trúc
 
 ## Amazon EKS Cluster
 

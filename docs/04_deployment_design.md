@@ -1,7 +1,7 @@
 # Deployment & CI/CD Design - Task Force 3 Self-Heal Engine - CDO-02
 
 **Doc owner:** CDO-02  
-**Status:** Draft for W11/W12 deployment design alignment  
+**Trạng thái:** Draft cho W11/W12 deployment design alignment  
 **Last updated:** 2026-06-24  
 
 ## 1. Chiến lược IaC
@@ -342,7 +342,7 @@ EKS workloads
 -> deployment gate / smoke test / verify signal
 ```
 
-## 9. Open questions
+## 9. Câu Hỏi Mở
 
 Những điểm dưới đây cần tiếp tục chốt với AI team hoặc trainer trước khi chuyển từ design sang implementation đầy đủ:
 
@@ -350,7 +350,7 @@ Những điểm dưới đây cần tiếp tục chốt với AI team hoặc tra
 - Tenant onboarding có cần tự động hóa sâu hơn bằng workflow engine, hay Terraform + GitOps là đủ cho scope hiện tại?
 - AI team có cung cấp environment/stub ổn định để smoke test private endpoint và auth flow không?
 
-## Related documents
+## Tài Liệu Liên Quan
 
 - `01_requirements_analysis.md` - Xác định scope, NFR và assumptions của CDO-02
 - `02_infra_design.md` - Kiến trúc tổng thể, component model và workflow

@@ -1,39 +1,145 @@
-# Pending Questions For AI Team - TF3 CDO-02
+# Câu Hỏi Còn Lại Cho AI Team - TF3 CDO-02
 
-These questions remain after aligning CDO-02 docs with AI repo commit `f0248ce667fa77cd5cbe1abc0d39ef6e81b321c9`.
+Tài liệu này ghi các câu hỏi còn cần AI team xác nhận sau khi CDO-02 đã đối chiếu contract AI tại commit `f0248ce667fa77cd5cbe1abc0d39ef6e81b321c9`.
 
-1. Hosted mock API
-   Please provide the reachable base URL for `POST /v1/detect`, `POST /v1/decide`, and `POST /v1/verify`, including auth method, required headers, and one successful curl/Postman example.
+## 1. Mock API Chính Thức
 
-2. Tenant ID
-   Confirm the official UUID for CDO-02. Current deployment contract maps `cdo-2` to `6c8b4b2b-4d45-4209-a1b4-4b532d56a31c`; should CDO-02 use this value in `X-Tenant-Id` and telemetry `tenant_id`?
+AI vui lòng cung cấp base URL có thể gọi được cho:
 
-3. W11/W12 evidence acceptance
-   Can W11/W12 accept AI mock API integration plus one real CDO Kubernetes sandbox action, or does AI require CDO to host a full app that continuously emits live telemetry?
+```text
+POST /v1/detect
+POST /v1/decide
+POST /v1/verify
+```
 
-4. `pattern_type=deferred`
-   Confirm that `deferred` actions must use GitOps/PR/commit flow and must not directly mutate the Kubernetes cluster from the CDO executor.
+CDO cần thêm:
 
-5. Confidence threshold
-   What minimum `/v1/detect` confidence should CDO use before calling `/v1/decide` and executing an action? If AI does not prescribe it, CDO-02 will default to configurable threshold plus manual escalation below threshold.
+- Auth method.
+- Required headers.
+- Một ví dụ curl/Postman gọi thành công.
+- Health/readiness endpoint nếu có.
 
-6. `suspected_fault_type` enum
-   Please publish the possible `anomaly_context.suspected_fault_type` values and map each value to expected action candidates.
+## 2. Tenant ID Chính Thức
 
-7. Mock response coverage
-   Can the AI mock return examples for all current actions: `RESTART_DEPLOYMENT`, `PATCH_MEMORY_LIMIT`, `SCALE_REPLICAS`, `ROLLOUT_UNDO`, and `ROTATE_SECRET`?
+Deployment contract hiện map `cdo-2` với UUID:
 
-8. `ROTATE_SECRET` policy
-   Will AI return `ROTATE_SECRET` during demo, and what guardrails/params should CDO enforce beyond `secret_name` and namespace checks? Until confirmed, CDO will deny or require manual approval.
+```text
+6c8b4b2b-4d45-4209-a1b4-4b532d56a31c
+```
 
-9. SQS ownership
-   Confirm that SQS is not part of the AI-CDO interface unless AI publishes a queue ARN and access policy. CDO will keep SQS only as an optional internal telemetry buffer.
+AI xác nhận CDO-02 có dùng UUID này cho `X-Tenant-Id` và telemetry `tenant_id` không?
 
-10. Topology registry
-   For `/v1/decide.blast_radius_config.allowed_namespaces`, does AI infer namespaces from telemetry labels, or does CDO need to register service-to-namespace-to-deployment mappings before testing?
+## 3. Evidence W11/W12 Có Được Chấp Nhận Không?
 
-11. Fallback runbook
-   Does AI provide static fallback runbooks for timeout/503/cost-cap cases, or should CDO-02 own fallback/escalation policy and send it to AI for review?
+CDO hiện đã có:
 
-12. Topology graph sample
-   CDO provides `evidence/w11-ai-contract-sync/topology-graph-sample.json`. Please confirm this graph format is enough for AI to build dependency correlation and return namespace/deployment targets.
+- App public `podinfo` chạy thật trên AWS EKS.
+- Logs, health check, readiness check, Prometheus metrics thật.
+- Action thật `RESTART_DEPLOYMENT` bằng Kubernetes rollout restart.
+- Mock payload đúng contract cho `/v1/detect`, `/v1/decide`, `/v1/verify`.
+
+AI/trainer xác nhận setup này có đủ cho W11/W12 evidence không, hay AI yêu cầu thêm một app business đầy đủ hơn?
+
+## 4. `pattern_type=deferred`
+
+Với `pattern_type=deferred`, AI xác nhận CDO phải đi theo GitOps/PR/commit flow và không mutate Kubernetes trực tiếp đúng không?
+
+CDO hiểu hiện tại:
+
+- `urgent`: CDO có thể execute Kubernetes trực tiếp sau safety gate.
+- `deferred`: CDO tạo thay đổi GitOps/PR, không gọi Kubernetes API trực tiếp.
+
+## 5. Ngưỡng Confidence
+
+AI đề xuất ngưỡng `confidence` tối thiểu bao nhiêu để CDO được gọi `/v1/decide` và execute action?
+
+Nếu AI không quy định, CDO sẽ để ngưỡng này configurable và mặc định escalation/manual review khi confidence thấp.
+
+## 6. Enum `suspected_fault_type`
+
+AI vui lòng publish danh sách giá trị hợp lệ cho:
+
+```text
+anomaly_context.suspected_fault_type
+```
+
+CDO cần danh sách này để map fault type với:
+
+- Safety gate rule.
+- Fallback runbook.
+- Action candidates.
+
+## 7. Coverage Của Mock Response
+
+AI mock có thể trả ví dụ cho đầy đủ action enum hiện tại không?
+
+```text
+RESTART_DEPLOYMENT
+PATCH_MEMORY_LIMIT
+SCALE_REPLICAS
+ROLLOUT_UNDO
+ROTATE_SECRET
+```
+
+CDO cần biết action nào được demo thật, action nào chỉ design-only hoặc manual approval.
+
+## 8. Policy Cho `ROTATE_SECRET`
+
+AI có trả `ROTATE_SECRET` trong demo không?
+
+Nếu có, AI vui lòng cung cấp:
+
+- Required params.
+- Guardrails.
+- Verify policy.
+- Rollback/escalation behavior.
+
+Cho tới khi AI xác nhận rõ, CDO sẽ deny hoặc yêu cầu manual approval với `ROTATE_SECRET`.
+
+## 9. SQS Ownership
+
+AI xác nhận SQS có còn là interface giữa AI và CDO không?
+
+CDO hiểu hiện tại:
+
+- AI contract mới chưa cung cấp SQS queue ARN.
+- CDO chỉ giữ SQS như optional internal telemetry buffer nếu cần.
+- AI-CDO interface chính vẫn là HTTP API `/v1/detect`, `/v1/decide`, `/v1/verify`.
+
+## 10. Topology Registry
+
+CDO đã cung cấp graph mẫu:
+
+```text
+evidence/w11-ai-contract-sync/topology-graph-sample.json
+```
+
+Mapping chính:
+
+```text
+checkout-svc -> tenant-a -> deployment/cdo-sample-api -> container/podinfo
+```
+
+AI xác nhận format này đủ để build dependency correlation và trả action target theo namespace/deployment chưa?
+
+## 11. Fallback Runbook
+
+Khi AI timeout, trả 503, vượt cost cap hoặc response không parse được, AI có cung cấp static fallback runbook không?
+
+Nếu không, CDO sẽ tự own fallback/escalation policy và gửi AI review.
+
+## 12. Format Action Target
+
+AI vui lòng target Kubernetes action theo format:
+
+```json
+{
+  "action": "RESTART_DEPLOYMENT",
+  "target": {
+    "namespace": "tenant-a",
+    "deployment": "cdo-sample-api"
+  }
+}
+```
+
+Không target theo `pod_name`, vì pod thay đổi sau rollout. CDO execute an toàn ở cấp Deployment.

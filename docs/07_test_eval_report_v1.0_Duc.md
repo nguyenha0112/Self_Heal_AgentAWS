@@ -248,7 +248,7 @@ Toàn bộ test trong section này phải pass. Nếu có bất kỳ cross-tenan
 | Cross-tenant queue contamination | Queue message có `tenant_id` và namespace không khớp | Message bị reject hoặc safety denied |
 | Audit query by tenant | Query audit cho `tenant-a` | Không expose payload content của `tenant-b` |
 
-## 11. Audit Evidence Requirements
+## 11. Yêu Cầu Audit Evidence
 
 Mọi scenario phải query được bằng `correlation_id`. Audit trail tối thiểu cần có:
 
@@ -300,7 +300,7 @@ Các gap đã biết trước W12 execution:
 - Real PagerDuty/OpsGenie integration nằm ngoài scope; Slack/mock pager escalation là đủ cho capstone.
 - Nếu AWS/EKS quota hoặc account access chặn full deployment, evidence phải ghi rõ test nào chạy trên Kubernetes sandbox và test nào chạy ở offline/mock mode.
 
-## 14. Final Result Summary
+## 14. Tóm Tắt Kết Quả Cuối
 
 Điền bảng này sau W12 evidence run.
 
@@ -314,7 +314,7 @@ Các gap đã biết trước W12 execution:
 | Complete audit coverage | 100% | TBD | TBD |
 | Critical security findings | 0 | TBD | TBD |
 
-## Related Documents
+## Tài Liệu Liên Quan
 
 - [`01_requirements_analysis.md`](01_requirements_analysis.md)
 - [`02_infra_design.md`](02_infra_design.md)
