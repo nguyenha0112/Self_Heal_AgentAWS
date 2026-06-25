@@ -340,7 +340,8 @@ Current real environment evidence:
 - AWS account `938145531618` can describe EKS cluster `cdo-eks-cluster-dev`.
 - Cluster is ACTIVE, Kubernetes version `1.30`, region `us-east-1`.
 - Kubeconfig was updated for the EKS context.
-- From this workstation, `kubectl` calls timed out, so live pod before/after evidence is pending a reachable Kubernetes API network path.
+- From this workstation, `kubectl` calls timed out because the EKS API endpoint is private-only: `endpointPublicAccess=false`, `endpointPrivateAccess=true`.
+- Live pod before/after evidence must be captured from inside the VPC path, such as VPN, bastion, CloudShell/VPC-attached runner, or CI runner with private subnet reachability.
 
 CDO added sample workload manifest for the safe live action demo:
 

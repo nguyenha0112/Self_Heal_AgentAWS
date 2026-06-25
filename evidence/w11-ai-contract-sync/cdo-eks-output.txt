@@ -19,6 +19,12 @@ Kubeconfig update result:
 
 Kubernetes API validation status:
 - kubectl requests timed out from this workstation after kubeconfig update.
+- Root cause confirmed by EKS config:
+  - endpointPublicAccess: false
+  - endpointPrivateAccess: true
+  - securityGroupIds: sg-07527c617eb81046c
+  - subnets: subnet-05426b071cc2319a4, subnet-074228f8a3906b261, subnet-06d7131f24bd2070a
+- This means live kubectl evidence must be captured from inside the VPC path, such as VPN, bastion, CloudShell/VPC-attached runner, or a CI runner with private subnet reachability.
 - Evidence is therefore split into:
   1. Confirmed AWS/EKS control-plane evidence above.
   2. Ready-to-run Kubernetes workload/action evidence commands in README.md.

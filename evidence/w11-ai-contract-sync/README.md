@@ -58,4 +58,9 @@ kubectl get deploy,pod,svc -n tenant-a -o wide
 
 ## Current limitation
 
-`kubectl` requests timed out from this workstation after kubeconfig was updated. The AWS control-plane evidence is real and confirmed, while live Kubernetes before/after pod evidence must be captured from a network path that can reach the EKS API endpoint.
+`kubectl` requests timed out from this workstation after kubeconfig was updated. EKS config confirms the API endpoint is private-only:
+
+- `endpointPublicAccess=false`
+- `endpointPrivateAccess=true`
+
+The AWS control-plane evidence is real and confirmed, while live Kubernetes before/after pod evidence must be captured from inside the VPC path, such as VPN, bastion, CloudShell/VPC-attached runner, or CI runner with private subnet reachability.
