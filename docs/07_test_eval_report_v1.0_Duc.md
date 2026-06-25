@@ -116,12 +116,12 @@ Nếu có SLO miss sau khi chạy test, điền bảng này để giải thích 
 
 1. Inject alert với `correlation_id=tc-01-*`, tenant `tenant-a`, namespace `tenant-a`.
 2. Cung cấp telemetry cho thấy `service_latency_p95` cao bất thường.
-3. CDO gọi `/v1/detect` và `/v1/decide`.
+3. CDO gọi `/v1/detect`; lưu `anomaly_context` từ response. CDO gọi `/v1/decide` với body bao gồm `anomaly_context` (bắt buộc theo contract-new-2).
 4. AI trả `RESTART_DEPLOYMENT` cho một deployment, có `verify_policy`; CDO có local rollback/runbook path.
 5. Safety gate validate tenant, allow-list, blast-radius, rollback/runbook path, `verify_policy` và idempotency.
 6. CDO chạy server-side dry-run.
-7. CDO execute hoặc mock-execute restart.
-8. CDO gọi `/v1/verify`.
+7. CDO execute hoặc mock-execute restart. Ghi lại: action, target (string "deployment/\<name\>"), status (COMPLETED|FAILED).
+8. CDO gọi `/v1/verify` với `action_executed: { action, target, status, execution_time_seconds }` và `post_telemetry_window`. Xử lý `next_action`: DONE → close; RETRY → retry; ROLLBACK → rollback; ESCALATE → gửi bundle.
 9. CDO ghi full audit trail.
 
 **Expected result:** Incident được close dưới trạng thái auto-resolved. Audit có `safety_passed`, `dry_run_done`, `execute_done`, `verify_done`, `incident_closed`.
@@ -165,12 +165,12 @@ Nếu có SLO miss sau khi chạy test, điền bảng này để giải thích 
    }
    # POST tới CDO telemetry ingestion endpoint
    ```
-2. CDO gọi `/v1/detect` với telemetry payload.
-3. CDO gọi `/v1/decide` — expect AI trả `SCALE_REPLICAS`, `pattern_type: "deferred"`, `verify_policy` có `window_seconds`.
+2. CDO gọi `/v1/detect`; lưu `anomaly_context` từ response.
+3. CDO gọi `/v1/decide` với body bao gồm `anomaly_context` (bắt buộc contract-new-2) — expect AI trả `SCALE_REPLICAS`, `pattern_type: "deferred"`, `verify_policy` có `window_seconds`.
 4. Safety gate validate: tenant match, namespace in allow-list, blast-radius (current replicas + delta <= 10), action in allow-list, idempotency.
 5. CDO **không** gọi K8s API trực tiếp — tạo Git commit cập nhật `replicas` trong `manifests/tenant-b/notification-service/values.yaml`.
-6. ArgoCD detect commit → sync → deployment scales up.
-7. CDO gọi `/v1/verify` với post-action telemetry cho thấy `queue_backlog` giảm.
+6. ArgoCD detect commit → sync → deployment scales up. CDO ghi: action="SCALE_REPLICAS", target="deployment/notification-service", status=COMPLETED.
+7. CDO gọi `/v1/verify` với `action_executed: { action, target, status: "COMPLETED" }` và `post_telemetry_window` cho thấy `queue_backlog` giảm. Xử lý `next_action`: DONE → close; RETRY/ROLLBACK/ESCALATE → theo contract.
 8. CDO ghi full audit trail.
 
 **Expected result:** Incident được close dưới trạng thái auto-resolved. Audit có `safety_passed`, `deferred_gitops_path`, Git commit hash, ArgoCD sync event, `verify_done`, `incident_closed`. Không có direct K8s mutation nào từ CDO executor (TC-16 cross-check).

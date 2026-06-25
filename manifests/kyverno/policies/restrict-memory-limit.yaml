@@ -1,0 +1,30 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: restrict-memory-limit
+  annotations:
+    policies.kyverno.io/title: Restrict Memory Limit
+    policies.kyverno.io/description: >
+      Deny Deployment CREATE/UPDATE nếu bất kỳ container nào có memory limit > 4Gi.
+      Blast-radius guard — ngăn PATCH_MEMORY_LIMIT đặt giá trị quá cao.
+spec:
+  validationFailureAction: Enforce
+  background: false
+  rules:
+    - name: limit-memory-per-container
+      match:
+        any:
+          - resources:
+              kinds:
+                - Deployment
+              namespaces:
+                - tenant-a
+                - tenant-b
+      validate:
+        message: "memory limit không được vượt quá 4Gi (blast-radius guard CDO-02)"
+        foreach:
+          - list: "request.object.spec.template.spec.containers[]"
+            pattern:
+              resources:
+                limits:
+                  memory: "<=4Gi"

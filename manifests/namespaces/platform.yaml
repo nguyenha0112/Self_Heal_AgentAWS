@@ -3,4 +3,5 @@ kind: Namespace
 metadata:
   name: platform
   labels:
-    tenant_id: platform
+    kubernetes.io/metadata.name: platform
+    selfheal.ai/component: executor

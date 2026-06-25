@@ -1,0 +1,26 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: tenant-b-workloads
+  namespace: argocd
+  labels:
+    tenant_id: tenant-b
+spec:
+  project: tenant-b
+
+  source:
+    # TODO: thay bằng Git repo thật của CDO-02
+    repoURL: https://github.com/<YOUR_ORG>/<YOUR_REPO>
+    targetRevision: HEAD
+    path: manifests/workloads/tenant-b
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: tenant-b
+
+  syncPolicy:
+    automated:
+      prune: false
+      selfHeal: false
+    syncOptions:
+      - CreateNamespace=false

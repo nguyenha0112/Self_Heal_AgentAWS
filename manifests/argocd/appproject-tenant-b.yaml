@@ -1,0 +1,27 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: tenant-b
+  namespace: argocd
+spec:
+  description: "ArgoCD project for tenant-b workloads (CDO-02)"
+
+  sourceRepos:
+    - "*"
+
+  destinations:
+    - namespace: tenant-b
+      server: https://kubernetes.default.svc
+
+  clusterResourceWhitelist: []
+
+  namespaceResourceBlacklist:
+    - group: ""
+      kind: ResourceQuota
+    - group: ""
+      kind: LimitRange
+
+  syncPolicy:
+    automated:
+      prune: false
+      selfHeal: false

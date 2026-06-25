@@ -1,0 +1,36 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: restrict-executor-namespace
+  annotations:
+    policies.kyverno.io/title: Restrict Deployment Namespace
+    policies.kyverno.io/description: >
+      Deny Deployment CREATE/UPDATE trong bất kỳ namespace nào ngoài allowlist.
+      Allowlist: tenant-a, tenant-b, kyverno, argocd, self-heal-system, platform, kube-system.
+      Ngăn executor vô tình (hoặc cố ý) tạo Deployment vào namespace không được phép.
+spec:
+  validationFailureAction: Enforce
+  background: false
+  rules:
+    - name: allowed-namespaces-only
+      match:
+        any:
+          - resources:
+              kinds:
+                - Deployment
+      exclude:
+        any:
+          - resources:
+              namespaces:
+                - tenant-a
+                - tenant-b
+                - kyverno
+                - argocd
+                - self-heal-system
+                - platform
+                - kube-system
+      validate:
+        message: >
+          Deployment mutation chỉ được phép trong:
+          tenant-a, tenant-b, kyverno, argocd, self-heal-system, platform, kube-system
+        deny: {}

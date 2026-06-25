@@ -184,6 +184,7 @@ Secrets dự kiến:
 | Secret | Storage | Accessed by |
 |---|---|---|
 | AI endpoint auth | K8s NetworkPolicy (Local Trust) — không cần secret riêng; executor pod label là "credential" | CDO executor |
+| **AI Engine Bedrock credentials** | AWS Secrets Manager path: `tf-3/ai-engine/bedrock` (contract-new-2) | AI Engine pod (IRSA) |
 | Webhook signing key | AWS Secrets Manager hoặc K8s Secret | Alert ingestor |
 | Kube access | Kubernetes ServiceAccount token | CDO executor |
 | Audit bucket config | Terraform variables/outputs | Executor/deploy pipeline |
@@ -265,7 +266,7 @@ Phần này liệt kê các tình huống nguy hiểm và control tương ứng.
 | AI trả namespace sai tenant | Safety gate deny + RBAC deny |
 | AI timeout/503 | No execute, escalate + audit |
 | Idempotency key trùng | Không execute trùng |
-| Telemetry message sai schema | Reject message, log validation error/DLQ nếu bật buffer, không gọi AI |
+| Telemetry message sai schema | Reject message, chuyển DLQ; **alert nếu tỷ lệ malformed > 0.5% trong 5 phút** (telemetry contract-new-2 threshold); không gọi AI |
 | Audit write fail | Stop action hoặc mark incident unsafe |
 | Executor bị lỗi giữa action | Verify/rollback/escalate theo trạng thái audit |
 | Secret bị lộ trong log | Redaction + không log sensitive headers |

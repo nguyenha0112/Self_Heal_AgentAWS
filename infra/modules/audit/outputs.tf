@@ -1,0 +1,8 @@
+output "audit_bucket_name"   { value = aws_s3_bucket.audit.bucket }
+output "audit_bucket_arn"    { value = aws_s3_bucket.audit.arn }
+output "dynamodb_table_name" { value = aws_dynamodb_table.idempotency.name }
+output "dynamodb_table_arn"  { value = aws_dynamodb_table.idempotency.arn }
+output "sqs_queue_url"       { value = aws_sqs_queue.telemetry.url }
+output "sqs_queue_arn"       { value = aws_sqs_queue.telemetry.arn }
+output "sqs_dlq_url"         { value = aws_sqs_queue.telemetry_dlq.url }
+output "sqs_dlq_arn"         { value = aws_sqs_queue.telemetry_dlq.arn }

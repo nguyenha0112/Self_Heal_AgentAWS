@@ -1,0 +1,27 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: restrict-replicas
+  annotations:
+    policies.kyverno.io/title: Restrict Replicas
+    policies.kyverno.io/description: >
+      Deny Deployment CREATE/UPDATE nếu replicas > 10.
+      Blast-radius guard — ngăn SCALE_REPLICAS vô hạn từ executor.
+spec:
+  validationFailureAction: Enforce
+  background: false
+  rules:
+    - name: limit-replicas
+      match:
+        any:
+          - resources:
+              kinds:
+                - Deployment
+              namespaces:
+                - tenant-a
+                - tenant-b
+      validate:
+        message: "replicas phải <= 10 (blast-radius guard CDO-02)"
+        pattern:
+          spec:
+            replicas: "<=10"

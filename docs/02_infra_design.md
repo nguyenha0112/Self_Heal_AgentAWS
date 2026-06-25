@@ -118,18 +118,18 @@ CDO-02 consume AI API Contract như sau:
 | API | CDO usage |
 |---|---|
 | `POST /v1/detect` | Gửi telemetry/context để AI xác định anomaly. Bắt buộc: `Idempotency-Key`, `X-Dry-Run-Mode` |
-| `POST /v1/decide` | Nhận `matched_runbook`, `pattern_type`, `action_plan[]`, `blast_radius_config`, `verify_policy`, `cost_cap_exceeded` |
+| `POST /v1/decide` | **Request bắt buộc**: `anomaly_context` (full object từ detect response — contract-new-2). **Response**: `matched_runbook`, `pattern_type`, `action_plan[]` (target là string "deployment/\<name\>"), `blast_radius_config`, `verify_policy`, `cost_cap_exceeded` |
 | `POST /v1/verify` | Gửi `correlation_id`, `idempotency_key`, `dry_run_mode`, `action_executed`, `post_telemetry_window`. Nhận `success`, `regression_detected`, `next_action` (DONE/RETRY/ROLLBACK/ESCALATE) |
 
 Headers/auth theo contract:
 
 ```text
-Authorization: AWS Signature Version 4 (header present theo contract spec)
-X-Tenant-Id: 6c8b4b2b-4d45-4209-a1b4-4b532d56a31c      ← confirmed chính thức
+X-Tenant-Id: 6c8b4b2b-4d45-4209-a1b4-4b532d56a31c      ← confirmed chính thức (contract-new-2)
 Idempotency-Key: UUID v4 (bắt buộc 3 endpoints)
 X-Dry-Run-Mode: "true" hoặc "false" (bắt buộc 3 endpoints)
 X-Correlation-Id: UUID v4 (tùy chọn detect; bắt buộc decide/verify)
 ```
+Không dùng Authorization SigV4 — AI endpoint dùng K8s NetworkPolicy in-cluster (Local Trust).
 
 SLA theo contract (cập nhật W11):
 
@@ -436,7 +436,7 @@ Scaling trong Pack #1 được thiết kế ở mức khả thi cho W12 demo, kh
 | CDO executor | Kubernetes Deployment replicas | CPU, request count, queue length nếu có |
 | Telemetry collector | Scale theo log/metric volume | CloudWatch/Prometheus scrape load |
 | Optional telemetry buffer | SQS buffer if enabled | Queue depth / age of oldest message |
-| AI Engine | Theo Deployment + HPA trên EKS của CDO | CPU, memory, request latency |
+| AI Engine | Deployment + HPA trên EKS của CDO. Compute: CPU 500m req / 1000m limit; Memory 1024Mi req / 2048Mi limit. HPA: Min 2, Max 10 replicas; scale khi CPU ≥ 70% hoặc Memory ≥ 80% (contract-new-2) | CPU utilization, Memory utilization |
 | Workload target | Theo AI action plan và safety gate | Queue backlog, latency/error rate |
 
 Nguyên tắc scale:
@@ -508,10 +508,11 @@ Mục tiêu T6 W11 là có skeleton/base IaC rõ ràng và commit evidence. Mứ
 
 ## 14. Open Items
 
-- Cần trainer confirm T6 yêu cầu infra chạy thật tới mức nào.
+- ✅ **Resolved W11 T6**: CDO đã apply Terraform + manifests lên EKS thật (`cdo-eks-cluster-dev` ACTIVE K8s 1.30 us-east-1). Kyverno, ArgoCD, audit infra (S3/DynamoDB/SQS), NetworkPolicy đã deploy. Evidence tại `infra/BUILD_GUIDE_T6.md`.
 - Offline Simulation Mode đã là Mock Mode theo contract AI; cần trainer confirm có cần bổ sung action thật trên sandbox không.
 - ✅ Confidence threshold: CDO-02 dùng `>= 0.8` để execute; `< 0.8` → escalate + audit.
 - ✅ `pattern_type: "deferred"` dùng ArgoCD — đã chốt trong `04_deployment_design.md` Section 3: ArgoCD cài namespace `argocd`, AppProject per tenant, executor tạo Git commit → ArgoCD sync → CDO verify qua `/v1/verify`.
+- ✅ **AI Engine compute/HPA (contract-new-2)**: CPU 500m/1000m, Memory 1024Mi/2048Mi. HPA Min 2 / Max 10 replicas; CPU ≥ 70%, Memory ≥ 80%. Secret path: `tf-3/ai-engine/bedrock` (AWS Secrets Manager).
 
 ## Tài Liệu Liên Quan
 

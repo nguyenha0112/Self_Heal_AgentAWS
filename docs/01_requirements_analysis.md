@@ -172,22 +172,47 @@ POST /v1/verify
 Authentication và headers (bắt buộc cho mọi request):
 
 ```text
-Authorization: AWS Signature Version 4 (header vẫn present theo contract spec)
-X-Tenant-Id: 6c8b4b2b-4d45-4209-a1b4-4b532d56a31c
+X-Tenant-Id: 6c8b4b2b-4d45-4209-a1b4-4b532d56a31c      ← confirmed chính thức (contract-new-2)
 Idempotency-Key: UUID v4 (bắt buộc cho CẢ BA endpoints)
 X-Dry-Run-Mode: "true" hoặc "false" (bắt buộc cho cả ba endpoints)
-X-Correlation-Id: UUID v4 (tùy chọn cho detect, bắt buộc cho decide/verify)
+X-Correlation-Id: UUID v4 (tùy chọn cho detect; bắt buộc cho decide/verify)
 ```
+Không dùng Authorization SigV4 — Auth cho AI endpoint là K8s NetworkPolicy in-cluster (Local Trust). SigV4 chỉ cần cho AWS services (S3, DynamoDB, CloudWatch).
 
 > **Ghi chú auth (updated 2026-06-25 → new contract)**: Auth cho AI endpoint là **Local Trust + K8s NetworkPolicy** (mTLS tùy chọn) — CDO Executor không cần SigV4 signing để gọi AI in-cluster. K8s NetworkPolicy restrict chỉ pods có label `app=cdo-self-heal-controller` mới được reach port 8080 của AI Engine. IRSA/EKS Pod Identity vẫn cần cho CDO Executor gọi các AWS services (S3, DynamoDB, CloudWatch, Secrets Manager).
 
-Luồng tích hợp:
+Luồng tích hợp (schema chốt contract-new-2, 2026-06-25):
 
 ```text
-/v1/detect -> AI trả anomaly_detected, severity, anomaly_context, confidence, reasoning, correlation_id
-/v1/decide -> AI trả matched_runbook, pattern_type, action_plan[], blast_radius_config, verify_policy, cost_cap_exceeded
-CDO execute/mock execute action (theo pattern_type: urgent = direct K8s; deferred = Git commit/PR)
-/v1/verify -> CDO gửi correlation_id, idempotency_key, dry_run_mode, action_executed + post_telemetry_window; AI trả success, regression_detected, next_action (enum: "DONE"|"RETRY"|"ROLLBACK"|"ESCALATE"), escalation_bundle nếu cần
+[1] POST /v1/detect
+    Request:  idempotency_key, dry_run_mode, telemetry_window[], optional correlation_id
+    Response: anomaly_detected, severity, anomaly_context (full object), confidence, reasoning, correlation_id
+
+[2] POST /v1/decide
+    Request (bắt buộc): correlation_id, idempotency_key, dry_run_mode,
+                        anomaly_context: <FULL object từ detect response — bắt buộc theo contract-new-2>
+    Response: matched_runbook, pattern_type, action_plan[], blast_radius_config, verify_policy, cost_cap_exceeded
+    action_plan[] item: { action, target: "deployment/<name>", params: {namespace: "..."}, ... }
+
+[3] CDO execute action (theo pattern_type):
+    - urgent: execute trực tiếp K8s API (RESTART_DEPLOYMENT, PATCH_MEMORY_LIMIT, ROLLOUT_UNDO)
+    - deferred: tạo Git commit/PR → ArgoCD sync (SCALE_REPLICAS, ROTATE_SECRET)
+    CDO ghi lại: action, target string, status (COMPLETED | FAILED)
+
+[4] POST /v1/verify
+    Request (bắt buộc): correlation_id, idempotency_key, dry_run_mode,
+                        action_executed: { action, target, status: "COMPLETED"|"FAILED",
+                                           execution_time_seconds (optional) },
+                        post_telemetry_window[]
+    Response: success, regression_detected (boolean),
+              next_action: "DONE"|"RETRY"|"ROLLBACK"|"ESCALATE",
+              escalation_bundle (chỉ có khi next_action=ESCALATE)
+
+CDO phải xử lý đầy đủ 4 giá trị next_action:
+    - DONE      → close incident, ghi audit incident_closed
+    - RETRY     → retry action với same pattern, ghi audit retrying
+    - ROLLBACK  → chạy rollback (kubectl rollout undo hoặc revert commit), ghi audit rollback_done
+    - ESCALATE  → gửi escalation_bundle lên channel cảnh báo, ghi audit escalated (không execute thêm)
 ```
 
 Các action AI contract định nghĩa (enum cố định):
@@ -278,7 +303,7 @@ Tất cả các điểm dưới đây đã được xác nhận trong 3 contract
 
 - Team chính thức là **CDO-02**.
 - CDO-02 đã chốt angle **K8s-heavy / Kubernetes Workflow Orchestration**.
-- Sandbox target là AWS/EKS, nhưng mức bắt buộc chạy thật ở T6 cần trainer xác nhận.
+- Sandbox target là AWS/EKS; cluster `cdo-eks-cluster-dev` đã ACTIVE (K8s 1.30, us-east-1, account 938145531618). Evidence thật thu được T6 W11 — xem `evidence/w11-ai-contract-sync/EKS_RUNTIME_EVIDENCE_REPORT.md`.
 - Region mặc định theo client brief là `us-east-1`, trừ khi trainer/mentor yêu cầu khác.
 - Observability theo contract AI gồm CloudWatch Logs, Prometheus metrics endpoint và OpenTelemetry traces về Jaeger hoặc AWS X-Ray.
 - Audit storage theo contract AI là S3 Object Lock Governance Mode, retention tối thiểu 90 ngày.
@@ -291,19 +316,20 @@ Tổng hợp trạng thái các câu hỏi với AI team và trainer/mentor.
 
 ### 11.1 Đã chốt với AI team (resolved 2026-06-25)
 
-1. ✅ **4 build patterns confirmed**: service stuck/latency spike, error rate spike/code-level fault, memory pressure/OOM, secret/cert expiry.
+1. ✅ **5 build patterns confirmed**: service stuck/latency spike, error rate spike/code-level fault, memory pressure/OOM, secret/cert expiry, queue/backpressure (TC-05 synthetic inject). Schema I/O chốt trong contract-new-2.
 2. ✅ **0 design-only**: queue/backpressure (`SCALE_REPLICAS`) đã nâng lên build-real (TC-05) qua synthetic `queue_backlog` signal injection.
 3. ✅ Signal naming đã chuẩn hóa theo telemetry contract mới (ví dụ: `service_error_rate`, không phải `istio_request_error_rate`).
 4. ✅ **Offline Simulation Mode / Mock Mode** — AI contract đã định nghĩa Mock Mode cho RE2/RE3 (deployment contract section Offline Simulation Mode). Trainer confirm là đủ evidence cho W12 demo.
 5. ✅ **AI skeleton endpoint URL** — endpoint nội bộ: `http://ai-engine.self-heal-system.svc.cluster.local:8080/` (confirmed deployment contract). CDO dùng endpoint này khi deploy AI image vào EKS.
 6. ✅ **503 fallback**: CDO escalate + audit, không execute mặc định (static runbook fallback nếu AI/CDO đã thống nhất).
 7. ✅ **SQS CDO-internal**: confirmed trong telemetry contract section 2.5.C.
+8. ✅ **I/O schema chốt (contract-new-2, 2026-06-25)**: `/v1/decide` request bắt buộc `anomaly_context` (full object từ detect); `/v1/verify` request bắt buộc `action_executed` ({action, target string, status COMPLETED|FAILED}); response bắt buộc `next_action` (DONE|RETRY|ROLLBACK|ESCALATE) và `regression_detected`. Action target format: `"target": "deployment/<name>"` (string); namespace qua `params.namespace`. DLQ alert threshold: > 0.5% malformed trong 5 phút.
 
 ### 11.2 Cần xác nhận với trainer/mentor (W12)
 
-1. Trainer có bắt buộc S3 Object Lock cho audit không, hay append-only log được chấp nhận? — CDO-02 dùng S3 Object Lock Governance Mode (confirmed từ trainer feedback W11) — Governance cho phép admin unlock khi cần, Compliance thì không xóa được.
+1. ✅ **Resolved W11**: S3 Object Lock Governance Mode — confirmed từ trainer feedback W11. Governance cho phép admin unlock khi cần; Compliance thì không xóa được (CDO giữ Governance).
 2. Trainer có yêu cầu region khác `us-east-1` không? — CDO-02 giả định `us-east-1` theo client brief.
-3. Trainer có yêu cầu base infra T6 phải chạy thật hoàn toàn không, hay skeleton + plan + commit evidence được chấp nhận? — CDO-02 target EKS thật; escalate mentor nếu setup bị block.
+3. ✅ **Resolved W11 T6**: CDO đã apply Terraform + manifests lên EKS thật (`cdo-eks-cluster-dev` ACTIVE). Evidence tại `evidence/w11-ai-contract-sync/` và `infra/BUILD_GUIDE_T6.md`.
 
 ## 12. Checklist Hoàn Thành Pack #1
 

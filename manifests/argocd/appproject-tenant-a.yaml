@@ -1,0 +1,29 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: tenant-a
+  namespace: argocd
+spec:
+  description: "ArgoCD project for tenant-a workloads (CDO-02)"
+
+  sourceRepos:
+    - "*"
+
+  destinations:
+    - namespace: tenant-a
+      server: https://kubernetes.default.svc
+
+  # Chỉ cho phép workload resources — không cho phép cluster-wide resources
+  clusterResourceWhitelist: []
+
+  namespaceResourceBlacklist:
+    - group: ""
+      kind: ResourceQuota
+    - group: ""
+      kind: LimitRange
+
+  # selfHeal: false — executor tạo Git commit, ArgoCD sync nhưng không tự heal ngoài workflow
+  syncPolicy:
+    automated:
+      prune: false
+      selfHeal: false
