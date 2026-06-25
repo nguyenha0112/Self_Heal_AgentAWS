@@ -1,0 +1,20 @@
+AI repo: https://github.com/AIops-g4/Capstone-Phase-2-Code
+Branch: main
+Latest checked commit: f0248ce667fa77cd5cbe1abc0d39ef6e81b321c9
+Checked at: 2026-06-25T08:15:11+07:00
+
+Contract files reviewed:
+- tf-3/ai/contracts/ai-api-contract.md
+- tf-3/ai/contracts/telemetry-contract.md
+- tf-3/ai/contracts/deployment-contract.md
+
+CDO alignment notes:
+- DELETE_POD is not part of the current AI action enum.
+- Current supported action enum:
+  - RESTART_DEPLOYMENT
+  - PATCH_MEMORY_LIMIT
+  - SCALE_REPLICAS
+  - ROLLOUT_UNDO
+  - ROTATE_SECRET
+- CDO owns Kubernetes execution. AI returns detect/decide/verify responses only.
+- SQS is not confirmed as an AI-CDO interface. CDO treats it as an optional internal buffer only.

@@ -314,3 +314,43 @@ Mục tiêu T6 W11 là có skeleton/base IaC rõ ràng và commit evidence. Mứ
 - `01_requirements_analysis.md`
 - `03_security_design.md`
 - `08_adrs.md`
+
+## 15. W11 AI Contract Sync Evidence - 2026-06-25
+
+CDO-02 aligned this design with AI repo commit `f0248ce667fa77cd5cbe1abc0d39ef6e81b321c9`.
+
+Contract changes CDO must enforce:
+
+- `DELETE_POD` is not part of the current AI action enum and must stay denied.
+- Current action allow-list is `RESTART_DEPLOYMENT`, `PATCH_MEMORY_LIMIT`, `SCALE_REPLICAS`, `ROLLOUT_UNDO`, `ROTATE_SECRET`.
+- `pattern_type=urgent` means CDO may execute direct Kubernetes mutation only after safety gate pass.
+- `pattern_type=deferred` means CDO must not directly mutate Kubernetes; use GitOps/PR path instead.
+- `cost_cap_exceeded=true`, AI timeout, AI 5xx, exhausted 429 retry, or invalid response means CDO falls back to pre-approved static runbook or escalates without unsafe mutation.
+- Telemetry support now includes the original signals plus `pod_oom_event`, `service_unhealthy`, `queue_backlog`, `service_throughput_rps`, `container_restart_count`, `secret_expiry_warning`, and `db_connection_pool_saturation`.
+- Topology mapping must be explicit: service -> namespace -> deployment.
+
+Evidence package:
+
+```text
+evidence/w11-ai-contract-sync/
+```
+
+Current real environment evidence:
+
+- AWS account `938145531618` can describe EKS cluster `cdo-eks-cluster-dev`.
+- Cluster is ACTIVE, Kubernetes version `1.30`, region `us-east-1`.
+- Kubeconfig was updated for the EKS context.
+- From this workstation, `kubectl` calls timed out, so live pod before/after evidence is pending a reachable Kubernetes API network path.
+
+CDO added sample workload manifest for the safe live action demo:
+
+```text
+manifests/workloads/tenant-a-sample-app.yaml
+```
+
+The intended real action demo is:
+
+```text
+kubectl rollout restart deployment/cdo-sample-api -n tenant-a
+kubectl rollout status deployment/cdo-sample-api -n tenant-a --timeout=120s
+```

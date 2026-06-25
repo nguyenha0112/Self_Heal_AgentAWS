@@ -1,0 +1,38 @@
+CDO-02 Kubernetes Evidence Commands
+===================================
+
+Current workstation status on 2026-06-25:
+- aws eks describe-cluster succeeded.
+- aws eks update-kubeconfig succeeded.
+- kubectl API requests timed out from this workstation, so live before/after pod output is pending.
+
+Runbook to capture live evidence when Kubernetes API access is available:
+
+1. Apply namespaces and sample workload:
+   kubectl apply -f manifests/namespaces/platform.yaml
+   kubectl apply -f manifests/namespaces/tenant-a.yaml
+   kubectl apply -f manifests/namespaces/tenant-b.yaml
+   kubectl apply -f manifests/workloads/tenant-a-sample-app.yaml
+
+2. Capture before state:
+   kubectl get ns tenant-a tenant-b platform --show-labels
+   kubectl get deploy,pod,svc -n tenant-a -o wide
+   kubectl rollout status deployment/cdo-sample-api -n tenant-a --timeout=120s
+
+3. Execute real safe action:
+   kubectl rollout restart deployment/cdo-sample-api -n tenant-a
+   kubectl rollout status deployment/cdo-sample-api -n tenant-a --timeout=120s
+
+4. Capture after state:
+   kubectl get deploy,pod,svc -n tenant-a -o wide
+   kubectl describe deployment cdo-sample-api -n tenant-a
+
+5. Capture cross-tenant deny evidence in CDO safety gate:
+   Use decide-response with target namespace tenant-b while incident namespace is tenant-a.
+   Expected result: denied_cross_tenant before kubectl mutation.
+
+Expected live evidence:
+- Before pod name and creation timestamp.
+- Rollout restart annotation update on deployment.
+- After pod name or restart timestamp changes.
+- Rollout status returns success.

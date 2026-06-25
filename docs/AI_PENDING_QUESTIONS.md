@@ -1,30 +1,36 @@
 # Pending Questions For AI Team - TF3 CDO-02
 
-These questions remain after aligning CDO-02 docs with the latest AI contracts.
+These questions remain after aligning CDO-02 docs with AI repo commit `f0248ce667fa77cd5cbe1abc0d39ef6e81b321c9`.
 
-1. Tenant ID
+1. Hosted mock API
+   Please provide the reachable base URL for `POST /v1/detect`, `POST /v1/decide`, and `POST /v1/verify`, including auth method, required headers, and one successful curl/Postman example.
+
+2. Tenant ID
    Confirm the official UUID for CDO-02. Current deployment contract maps `cdo-2` to `6c8b4b2b-4d45-4209-a1b4-4b532d56a31c`; should CDO-02 use this value in `X-Tenant-Id` and telemetry `tenant_id`?
 
-2. AI skeleton endpoint
-   When will the stable stub endpoint be available for CDO integration testing? Please confirm reachable URL, health/readiness URLs, auth setup, and whether `https://ai-engine.tf-3.internal/` is already routable from the CDO environment.
+3. W11/W12 evidence acceptance
+   Can W11/W12 accept AI mock API integration plus one real CDO Kubernetes sandbox action, or does AI require CDO to host a full app that continuously emits live telemetry?
 
-3. Confidence threshold
-   What minimum `/v1/detect` confidence should CDO use before calling `/v1/decide` and executing an action? If AI does not prescribe it, CDO-02 will make it configurable and default to manual escalation below threshold.
+4. `pattern_type=deferred`
+   Confirm that `deferred` actions must use GitOps/PR/commit flow and must not directly mutate the Kubernetes cluster from the CDO executor.
 
-4. `ROTATE_SECRET` policy
-   Will AI return `ROTATE_SECRET` during demo, and what guardrails/params should CDO enforce beyond `secret_name` and namespace checks?
+5. Confidence threshold
+   What minimum `/v1/detect` confidence should CDO use before calling `/v1/decide` and executing an action? If AI does not prescribe it, CDO-02 will default to configurable threshold plus manual escalation below threshold.
 
-5. `suspected_fault_type` enum
-   Please publish the possible `anomaly_context.suspected_fault_type` values. CDO needs an allow-list to map fault types to safety gates and fallback runbooks.
+6. `suspected_fault_type` enum
+   Please publish the possible `anomaly_context.suspected_fault_type` values and map each value to expected action candidates.
 
-6. SQS ownership
-   Earlier docs implied telemetry via SQS, while the latest telemetry contract describes normalized payloads and OTel/Prometheus/Fluentd sources but does not provide an SQS queue ARN. Is SQS still part of the AI-CDO interface, or can CDO keep SQS only as an internal buffer?
+7. Mock response coverage
+   Can the AI mock return examples for all current actions: `RESTART_DEPLOYMENT`, `PATCH_MEMORY_LIMIT`, `SCALE_REPLICAS`, `ROLLOUT_UNDO`, and `ROTATE_SECRET`?
 
-7. Offline simulation evidence
-   Is RE2/RE3 Mock Mode enough evidence for W12, or should CDO-02 add at least one live Kubernetes sandbox action scenario?
+8. `ROTATE_SECRET` policy
+   Will AI return `ROTATE_SECRET` during demo, and what guardrails/params should CDO enforce beyond `secret_name` and namespace checks? Until confirmed, CDO will deny or require manual approval.
 
-8. 503 fallback runbook
-   Does AI provide a static fallback runbook for AI timeout/503, or should CDO-02 own the fallback/escalation policy and request AI review?
+9. SQS ownership
+   Confirm that SQS is not part of the AI-CDO interface unless AI publishes a queue ARN and access policy. CDO will keep SQS only as an optional internal telemetry buffer.
 
-9. Namespace registry
-   For `/v1/decide.blast_radius_config.allowed_namespaces`, does AI generate namespaces from telemetry labels, or does CDO need to register tenant namespace mappings with AI beforehand?
+10. Topology registry
+   For `/v1/decide.blast_radius_config.allowed_namespaces`, does AI infer namespaces from telemetry labels, or does CDO need to register service-to-namespace-to-deployment mappings before testing?
+
+11. Fallback runbook
+   Does AI provide static fallback runbooks for timeout/503/cost-cap cases, or should CDO-02 own fallback/escalation policy and send it to AI for review?

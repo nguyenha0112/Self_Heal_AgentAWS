@@ -1,0 +1,31 @@
+[CDO-02] INFRASTRUCTURE DEPLOYMENT OUTPUT
+=========================================
+Cluster Name : cdo-eks-cluster-dev
+Status       : ACTIVE
+Version      : 1.30
+Region       : us-east-1
+Endpoint     : https://50C1A04B659A3A76834320B76C3A9392.gr7.us-east-1.eks.amazonaws.com
+Cluster ARN  : arn:aws:eks:us-east-1:938145531618:cluster/cdo-eks-cluster-dev
+AWS Account  : 938145531618
+AWS Caller   : arn:aws:iam::938145531618:user/terraform-cli-user
+
+Commands executed from CDO workstation:
+- aws eks describe-cluster --name cdo-eks-cluster-dev --region us-east-1
+- aws sts get-caller-identity
+- aws eks update-kubeconfig --name cdo-eks-cluster-dev --region us-east-1
+
+Kubeconfig update result:
+- Context updated: arn:aws:eks:us-east-1:938145531618:cluster/cdo-eks-cluster-dev
+
+Kubernetes API validation status:
+- kubectl requests timed out from this workstation after kubeconfig update.
+- Evidence is therefore split into:
+  1. Confirmed AWS/EKS control-plane evidence above.
+  2. Ready-to-run Kubernetes workload/action evidence commands in README.md.
+
+Components expected from IaC/manifests:
+- VPC & Private/Public Subnets (NAT Gateway Enabled)
+- EKS Control Plane v1.30
+- Default Managed Node Group (t3.medium)
+- Kubernetes Namespaces: tenant-a, tenant-b, platform
+- Observability Base: CloudWatch Logs
