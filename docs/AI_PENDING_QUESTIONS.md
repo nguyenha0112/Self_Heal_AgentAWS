@@ -34,3 +34,6 @@ These questions remain after aligning CDO-02 docs with AI repo commit `f0248ce66
 
 11. Fallback runbook
    Does AI provide static fallback runbooks for timeout/503/cost-cap cases, or should CDO-02 own fallback/escalation policy and send it to AI for review?
+
+12. Topology graph sample
+   CDO provides `evidence/w11-ai-contract-sync/topology-graph-sample.json`. Please confirm this graph format is enough for AI to build dependency correlation and return namespace/deployment targets.

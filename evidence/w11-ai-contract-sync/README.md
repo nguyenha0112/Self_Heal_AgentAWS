@@ -40,6 +40,7 @@ This folder is the handoff package for AI Team integration.
 - `verify-request.json`: CDO request shape for `/v1/verify`.
 - `safety-gate-result.txt`: pass/deny decisions CDO will enforce.
 - `kubectl-before-after.txt`: commands for capturing live Kubernetes restart evidence.
+- `topology-graph-sample.json`: topology graph and CDO service-to-namespace-to-deployment mapping for AI.
 
 ## Live demo path
 
