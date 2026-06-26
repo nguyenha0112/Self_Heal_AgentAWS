@@ -88,8 +88,15 @@ Caption: CDO executor là điểm điều phối chính. AI chỉ đưa ra decis
 3. Telemetry enqueue vào SQS (CDO-internal buffer). CDO worker dequeue theo rate limit (≤100 RPS/tenant cho /v1/detect).
    Với RE2/RE3 Offline Simulation Mode: preprocessor đọc CSV → enqueue SQS → worker forward sang AI.
 4. CDO executor gọi AI /v1/detect với telemetry payload.
-5. Nếu AI trả anomaly_detected=true và confidence >= 0.8, executor gọi /v1/decide.
-   Nếu confidence < 0.8 → escalate + audit, không gọi /v1/decide.
+5. CDO chạy Pre-Decide Gate dựa trên detect response — quyết định có gọi /v1/decide không:
+   - anomaly_detected=false → đóng incident, ghi audit no_anomaly, kết thúc.
+   - confidence < 0.5 → discard (likely noise), ghi log warning.
+   - confidence 0.5–0.79 + severity LOW/MEDIUM → log warning, không action.
+   - confidence 0.5–0.79 + severity HIGH/CRITICAL → escalate ngay, ghi audit low_confidence_escalated.
+   - Flapping: cùng service detect lần 3+ trong 10 phút → escalate, ghi audit flapping_escalated.
+   - Maintenance window active → suppress, ghi audit maintenance_suppressed.
+   - confidence >= 0.8 + severity MEDIUM/HIGH/CRITICAL → tiếp tục gọi /v1/decide.
+   CDO KHÔNG filter theo fault type — AI tự trả confidence thấp nếu không match được pattern.
 6. AI trả matched_runbook, action_plan[], pattern_type, blast_radius_config, verify_policy, cost_cap_exceeded.
 7. Safety gate validate: tenant_id, namespace, allowed_namespaces, blast-radius, rollback plan, verify_policy, idempotency key, action allow-list.
 8a. [URGENT PATH] Nếu pattern_type = "urgent":
@@ -237,6 +244,10 @@ Trong capstone, CDO-02 chỉ cần tối thiểu 2 tenants để chứng minh is
 
 Safety gate là lớp kiểm tra trước khi CDO thực hiện bất kỳ action nào trên Kubernetes. Có thể hiểu đây là "bộ phanh an toàn" của hệ thống self-heal.
 
+> **Phân biệt Pre-Decide Gate vs Safety Gate:**
+> - **Pre-Decide Gate** (Section 5, step 5): chạy SAU `/v1/detect`, TRƯỚC `/v1/decide`. Hỏi "có nên để hệ thống tự xử lý không?" — dựa trên confidence, severity, flapping, maintenance window.
+> - **Safety Gate** (Section 8): chạy SAU `/v1/decide`, TRƯỚC execute. Hỏi "action này có an toàn để execute không?" — dựa trên tenant match, action allow-list, blast-radius, rollback plan.
+
 Ví dụ: nếu AI trả về "restart deployment tenant-b/api-service" nhưng incident đang thuộc `tenant-a`, safety gate phải chặn ngay và ghi audit.
 
 Safety gate bắt buộc kiểm tra:
@@ -249,7 +260,6 @@ Safety gate bắt buộc kiểm tra:
 | Rollback plan | Bắt buộc có với action mutate |
 | Verify plan | Bắt buộc có metric/log để verify sau action |
 | Idempotency | Không execute trùng cùng `Idempotency-Key`; ưu tiên DynamoDB conditional write |
-| AI confidence | `confidence >= 0.8` → execute; `< 0.8` → escalate + audit, không execute |
 | `pattern_type` routing | `"urgent"` → execute trực tiếp K8s sau safety pass; `"deferred"` → bắt buộc Git commit/PR path |
 | `cost_cap_exceeded` | Nếu `true`: log + notify team, vẫn execute nhưng không escalate cost thêm |
 | Failure fallback | AI 503/timeout -> escalate + audit, không execute mặc định |

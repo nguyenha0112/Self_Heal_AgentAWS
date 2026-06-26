@@ -100,6 +100,9 @@ Nếu có SLO miss sau khi chạy test, điền bảng này để giải thích 
 | TC-16 | `pattern_type: deferred` routing | AI trả `pattern_type: "deferred"` (e.g. SCALE_REPLICAS) | CDO tạo Git commit/PR, **không** gọi K8s API trực tiếp | Không có K8s mutation, có Git commit/PR evidence, audit ghi `deferred_gitops_path` |
 | TC-17 | `cost_cap_exceeded: true` handling | AI `/v1/decide` trả `cost_cap_exceeded: true` | CDO log warning + notify, vẫn execute action plan theo safety gate | Audit ghi `cost_cap_exceeded_warning`, action executed bình thường |
 | TC-18 | 403 Tenant mismatch | `X-Tenant-Id` header ≠ `tenant_id` trong payload | CDO nhận 403, không retry, ghi audit | Audit ghi `tenant_mismatch`, không có action execute |
+| TC-19 | Pre-Decide: confidence quá thấp | AI `/v1/detect` trả `confidence=0.40`, `anomaly_detected=true` | CDO discard — không gọi `/v1/decide` | Không có decide call; audit ghi `low_confidence_discard` |
+| TC-20 | Pre-Decide: confidence trung bình + severity cao | AI detect trả `confidence=0.65`, `severity=HIGH` | CDO escalate ngay, không gọi `/v1/decide` | Không có decide call; audit ghi `low_confidence_escalated` |
+| TC-21 | Pre-Decide: flapping detection | Cùng service bị detect lần 3 trong vòng 10 phút | CDO escalate ở lần 3, không gọi `/v1/decide` thêm | Audit ghi `flapping_escalated`; chỉ có tối đa 2 decide calls trong window |
 
 ## 6. Detailed Test Cases
 

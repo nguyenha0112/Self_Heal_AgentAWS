@@ -182,12 +182,29 @@ Không dùng Authorization SigV4 — Auth cho AI endpoint là K8s NetworkPolicy 
 
 > **Ghi chú auth (updated 2026-06-25 → new contract)**: Auth cho AI endpoint là **Local Trust + K8s NetworkPolicy** (mTLS tùy chọn) — CDO Executor không cần SigV4 signing để gọi AI in-cluster. K8s NetworkPolicy restrict chỉ pods có label `app=cdo-self-heal-controller` mới được reach port 8080 của AI Engine. IRSA/EKS Pod Identity vẫn cần cho CDO Executor gọi các AWS services (S3, DynamoDB, CloudWatch, Secrets Manager).
 
-Luồng tích hợp (schema chốt contract-new-2, 2026-06-25):
+Luồng tích hợp (schema chốt contract-new-3, 2026-06-26):
 
 ```text
 [1] POST /v1/detect
     Request:  idempotency_key, dry_run_mode, telemetry_window[], optional correlation_id
     Response: anomaly_detected, severity, anomaly_context (full object), confidence, reasoning, correlation_id
+
+[1.5] CDO PRE-DECIDE GATE — chạy ngay sau [1], trước khi gọi [2]
+    CDO tự quyết định có tiếp tục để hệ thống tự xử lý hay không.
+    AI Engine là bộ não match pattern; CDO là bên quyết định mức độ tin tưởng để tự động hoá.
+
+    Condition                                          | CDO action              | Audit reason
+    ---------------------------------------------------|-------------------------|---------------------------
+    anomaly_detected = false                           | Đóng quiet, no action   | no_anomaly
+    confidence < 0.5                                   | Discard (likely noise)  | low_confidence_discard
+    confidence 0.5–0.79 + severity LOW/MEDIUM          | Log warning, no action  | low_confidence_no_action
+    confidence 0.5–0.79 + severity HIGH/CRITICAL       | Escalate ngay           | low_confidence_escalated
+    Flapping: service bị detect lần 3+ trong 10 phút  | Escalate                | flapping_escalated
+    Maintenance window active                          | Suppress                | maintenance_suppressed
+    confidence >= 0.8 + severity MEDIUM/HIGH/CRITICAL  | Tiếp tục → gọi [2]     | proceed_to_decide
+
+    Nguyên tắc: CDO KHÔNG tự filter theo fault type — AI Engine là bên biết pattern nào nó
+    handle được. Nếu AI không match pattern → AI tự trả confidence thấp → confidence gate bắt.
 
 [2] POST /v1/decide
     Request (bắt buộc): correlation_id, idempotency_key, dry_run_mode,
