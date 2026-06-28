@@ -1,0 +1,28 @@
+# gitleaks config — CDO-02
+# Giữ TOÀN BỘ rule mặc định cho code thật (executor/, infra/, manifests/).
+# Chỉ allowlist: (1) UUID ví dụ công khai trong AI contract/evidence — KHÔNG phải secret;
+#                (2) thư mục tài liệu + reference của đội khác (không phải code CDO-02).
+title = "CDO-02 gitleaks"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Bỏ false-positive: UUID ví dụ trong contract/evidence + folder tài liệu/đội khác"
+
+# Khớp theo chuỗi match (UUID ví dụ trong payload mẫu của AI contract)
+regexes = [
+  '''d3b07384-d113-495f-9f58-20d18d357d75''',  # idempotency_key ví dụ
+  '''9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d''',  # correlation_id ví dụ
+  '''6c8b4b2b-4d45-4209-a1b4-4b532d56a31c''',  # tenant_id CDO-02 (định danh, không bí mật)
+]
+
+# Khớp theo đường dẫn file — tài liệu & reference, không quét secret ở đây
+paths = [
+  '''contract.*''',          # contract/, "contract - new 2/3/4"
+  '''new-contract/.*''',
+  '''evidence/.*''',
+  '''CDO-01/.*''',           # reference đội bạn
+  '''(^|/)AI/.*''',          # reference team AI
+  '''capstone-phase2/.*''',  # template/reference gốc
+]
