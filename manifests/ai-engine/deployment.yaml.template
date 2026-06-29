@@ -47,7 +47,7 @@ spec:
       serviceAccountName: ai-engine      # IRSA → Bedrock/S3/DynamoDB/SecretsManager (module iam/)
       containers:
         - name: ai-engine               # §2.A: container name cố định
-          image: <AI_ENGINE_IMAGE>      # ⚠ THAY: <acct>.dkr.ecr.us-east-1.amazonaws.com/ai-engine:<tag>
+          image: <AI_ENGINE_IMAGE>      # ⚠ THAY: <acct>.dkr.ecr.ap-southeast-1.amazonaws.com/ai-engine:<tag>
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
@@ -57,7 +57,7 @@ spec:
             - name: BEDROCK_SECRET_PATH
               value: "tf-3/ai-engine/bedrock"   # §3.B path; value thật do AI team set
             - name: AWS_REGION
-              value: "us-east-1"
+              value: "ap-southeast-1"
           resources:                     # §2.A
             requests:
               cpu: "500m"

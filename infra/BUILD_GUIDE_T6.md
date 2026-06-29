@@ -76,7 +76,7 @@ aws sts get-caller-identity
 aws eks describe-cluster --name cdo-eks-cluster-dev --query "cluster.status"
 
 # Update kubeconfig
-aws eks update-kubeconfig --name cdo-eks-cluster-dev --region us-east-1
+aws eks update-kubeconfig --name cdo-eks-cluster-dev --region ap-southeast-1
 kubectl get nodes
 ```
 
@@ -193,9 +193,8 @@ kubectl apply -f ../../manifests/workloads/tenant-b-sample-app.yaml
 kubectl apply -f ../../manifests/argocd/appproject-tenant-a.yaml
 kubectl apply -f ../../manifests/argocd/appproject-tenant-b.yaml
 
-# TODO: cập nhật repoURL trong application manifests trước khi apply
-# kubectl apply -f ../../manifests/argocd/application-tenant-a.yaml
-# kubectl apply -f ../../manifests/argocd/application-tenant-b.yaml
+kubectl apply -f ../../manifests/argocd/application-tenant-a.yaml
+kubectl apply -f ../../manifests/argocd/application-tenant-b.yaml
 ```
 
 ---

@@ -1,4 +1,5 @@
 variable "cluster_name" {}
+variable "aws_region" {}
 variable "oidc_provider_arn" {}
 variable "oidc_issuer_url" {}
 variable "aws_account_id" {}

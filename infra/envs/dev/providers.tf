@@ -17,24 +17,16 @@ terraform {
   }
 
   backend "s3" {
-    bucket       = "cdo-tf-state-938145531618-dev"
+    bucket       = "cdo-tf-state-012619468490-ap-southeast-1-dev"
     key          = "envs/dev/terraform.tfstate"
-    region       = "us-east-1"
+    region       = "ap-southeast-1"
     use_lockfile = true  # native S3 locking (Terraform >= 1.10) — không cần DynamoDB
     encrypt      = true
   }
 }
 
-data "aws_eks_cluster" "main" {
-  name = var.cluster_name
-}
-
-data "aws_eks_cluster_auth" "main" {
-  name = var.cluster_name
-}
-
 provider "aws" {
-  region = "us-east-1"
+  region = var.aws_region
 
   default_tags {
     tags = {
@@ -46,15 +38,25 @@ provider "aws" {
 }
 
 provider "kubernetes" {
-  host                   = data.aws_eks_cluster.main.endpoint
-  cluster_ca_certificate = base64decode(data.aws_eks_cluster.main.certificate_authority[0].data)
-  token                  = data.aws_eks_cluster_auth.main.token
+  host                   = module.eks.cluster_endpoint
+  cluster_ca_certificate = base64decode(module.eks.cluster_certificate_authority_data)
+
+  exec {
+    api_version = "client.authentication.k8s.io/v1beta1"
+    command     = "aws"
+    args        = ["eks", "get-token", "--cluster-name", module.eks.cluster_name, "--region", var.aws_region]
+  }
 }
 
 provider "helm" {
   kubernetes {
-    host                   = data.aws_eks_cluster.main.endpoint
-    cluster_ca_certificate = base64decode(data.aws_eks_cluster.main.certificate_authority[0].data)
-    token                  = data.aws_eks_cluster_auth.main.token
+    host                   = module.eks.cluster_endpoint
+    cluster_ca_certificate = base64decode(module.eks.cluster_certificate_authority_data)
+
+    exec {
+      api_version = "client.authentication.k8s.io/v1beta1"
+      command     = "aws"
+      args        = ["eks", "get-token", "--cluster-name", module.eks.cluster_name, "--region", var.aws_region]
+    }
   }
 }

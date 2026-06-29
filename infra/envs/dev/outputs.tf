@@ -47,3 +47,18 @@ output "ai_engine_secret_arn" {
   description = "ARN Secrets Manager tf-3/ai-engine/bedrock"
   value       = module.secrets.secret_arn
 }
+
+output "argocd_namespace" {
+  description = "Namespace where ArgoCD is installed"
+  value       = module.argocd.namespace
+}
+
+output "argocd_release_name" {
+  description = "Helm release name for ArgoCD"
+  value       = module.argocd.release_name
+}
+
+output "argocd_chart_version" {
+  description = "ArgoCD chart version managed by Terraform"
+  value       = module.argocd.chart_version
+}

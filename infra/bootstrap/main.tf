@@ -14,7 +14,7 @@ terraform {
 }
 
 provider "aws" {
-  region = "us-east-1"
+  region = "ap-southeast-1"
 
   default_tags {
     tags = {
@@ -25,9 +25,12 @@ provider "aws" {
   }
 }
 
+data "aws_caller_identity" "current" {}
+data "aws_region" "current" {}
+
 # Bucket name gắn account ID để tránh conflict tên global S3
 locals {
-  bucket_name = "cdo-tf-state-938145531618-dev"
+  bucket_name = "cdo-tf-state-${data.aws_caller_identity.current.account_id}-${data.aws_region.current.name}-dev"
 }
 
 resource "aws_s3_bucket" "tfstate" {
@@ -78,7 +81,7 @@ resource "aws_s3_bucket_policy" "tfstate" {
       {
         Sid       = "AllowTerraformStateAccess"
         Effect    = "Allow"
-        Principal = { AWS = "arn:aws:iam::938145531618:root" }
+        Principal = { AWS = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:root" }
         Action = [
           "s3:GetObject",
           "s3:PutObject",

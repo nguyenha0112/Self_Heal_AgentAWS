@@ -2,6 +2,7 @@ module "vpc" {
   source       = "../../modules/vpc"
   environment  = var.environment
   cluster_name = var.cluster_name
+  aws_region   = var.aws_region
 }
 
 module "eks" {
@@ -20,6 +21,7 @@ module "audit" {
 module "iam" {
   source             = "../../modules/iam"
   cluster_name       = var.cluster_name
+  aws_region         = var.aws_region
   oidc_provider_arn  = module.eks.oidc_provider_arn
   oidc_issuer_url    = module.eks.cluster_oidc_issuer_url
   aws_account_id     = var.aws_account_id
