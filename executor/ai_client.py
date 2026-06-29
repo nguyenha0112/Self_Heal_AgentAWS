@@ -86,6 +86,7 @@ class AIClient:
         headers = self._headers(correlation_id, body["idempotency_key"])
 
         attempt = 0
+        rl_attempt = 0
         while True:
             try:
                 resp = self._session.post(url, json=body, headers=headers, timeout=timeout_s)
@@ -107,9 +108,13 @@ class AIClient:
             if code == 409:
                 raise AIConflict(self._msg(resp))
             if code == 429:
+                if rl_attempt >= self.cfg.http_429_max_retries:
+                    raise AIUnavailable(
+                        f"429 rate-limited {rl_attempt} lần liên tiếp tại {path} → escalate")
                 retry_after = float(resp.headers.get("Retry-After", "1"))
                 # backoff theo Retry-After rồi thử lại (không tính vào quota 500)
                 time.sleep(retry_after)
+                rl_attempt += 1
                 continue
             if code == 500:
                 if attempt < self.cfg.http_500_max_retries:

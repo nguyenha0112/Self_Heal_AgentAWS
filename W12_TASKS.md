@@ -66,7 +66,7 @@
                "deployment.kubernetes.io/revision"),
        }
    ```
-3. Test trên cluster (sau khi B-01 xong): `aws eks update-kubeconfig --name cdo-eks-cluster-dev --region us-east-1` để có kubeconfig.
+3. Test trên cluster (sau khi B-01 xong): `aws eks update-kubeconfig --name cdo-eks-cluster-dev --region ap-southeast-1` để có kubeconfig.
 ✅ Kiểm tra:
    ```bash
    cd executor
@@ -157,7 +157,7 @@
    ```bash
    export CDO_IDEMPOTENCY_TABLE=cdo-idempotency-dev
    export CDO_AUDIT_BUCKET=cdo-audit-cdo-eks-cluster-dev-dev   # cờ "đang chạy AWS"
-   export AWS_REGION=us-east-1
+   export AWS_REGION=ap-southeast-1
    ```
    *(Lưu ý: code dùng `cfg.audit_bucket` khác rỗng làm cờ bật DynamoDB thật — xem [idempotency.py](executor/idempotency.py) dòng `if _HAS_BOTO and cfg.audit_bucket`.)*
 ✅ Kiểm tra: chạy cùng 1 scenario 2 lần với cùng idempotency_key → lần 2 audit ghi `idempotency_duplicate_denied`, không execute lại. Hoặc `aws dynamodb scan --table-name cdo-idempotency-dev` thấy item.
@@ -284,7 +284,7 @@
 
 **Bối cảnh:** Terraform module + manifests đã có khung; EKS từng ACTIVE ở W11. Việc tuần này là **dựng lại cluster, apply đủ infra, cung cấp ARN/endpoint cho team A**, và cài ArgoCD+Kyverno. Quy tắc state: 1 người apply 1 lúc (WORK_RULE §IV).
 
-> Chuẩn bị: `aws configure` (account 938145531618, region us-east-1) có quyền admin/poweruser.
+> Chuẩn bị: `aws configure` (account 012619468490, region ap-southeast-1) có quyền admin/poweruser.
 
 ---
 
@@ -296,7 +296,7 @@
    terraform init
    terraform plan -out tf.plan          # review kỹ trước khi apply
    terraform apply tf.plan              # tạo VPC + EKS + node group
-   aws eks update-kubeconfig --name cdo-eks-cluster-dev --region us-east-1
+   aws eks update-kubeconfig --name cdo-eks-cluster-dev --region ap-southeast-1
    kubectl get nodes                    # phải Ready
    ```
 2. Nếu node group chưa lên: kiểm tra `desired_size>=1` trong module eks.
@@ -313,7 +313,7 @@
 2. Annotate ServiceAccount:
    ```bash
    kubectl annotate sa tf3-cdo-controller -n self-heal-system \
-     eks.amazonaws.com/role-arn=arn:aws:iam::938145531618:role/<executor-irsa> --overwrite
+     eks.amazonaws.com/role-arn=arn:aws:iam::012619468490:role/<executor-irsa> --overwrite
    ```
 ✅ Kiểm tra: chạy 1 pod test trong namespace đó, `aws sts get-caller-identity` trong pod trả về role IRSA (không phải node role).
 📎 Evidence: output get-caller-identity từ trong pod.

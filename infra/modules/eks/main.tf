@@ -12,6 +12,13 @@ module "eks" {
   # Required for IRSA (IAM Roles for Service Accounts)
   enable_irsa = true
 
+  # Cho phép truy cập API từ ngoài VPC (laptop chạy terraform/helm/kubectl).
+  # Mặc định module ra private-only → provider helm/kubectl từ local bị i/o timeout.
+  # Sandbox: mở 0.0.0.0/0; production nên giới hạn về IP văn phòng/VPN.
+  cluster_endpoint_public_access       = true
+  cluster_endpoint_private_access      = true
+  cluster_endpoint_public_access_cidrs = ["0.0.0.0/0"]
+
   cluster_addons = {
     coredns    = { most_recent = true }
     kube-proxy = { most_recent = true }

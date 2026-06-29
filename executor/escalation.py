@@ -24,6 +24,7 @@ _REASON_TEXT: dict[str, str] = {
     "missing_verify_policy": "Safety Gate từ chối: AI không trả verify_policy.",
     "missing_rollback_path": "Safety Gate từ chối: thiếu đường rollback / action_plan rỗng.",
     "invalid_pattern_type": "Safety Gate từ chối: pattern_type không hợp lệ.",
+    "missing_target_namespace": "Safety Gate từ chối: AI không trả namespace cho action.",
     "circuit_breaker_open": "Circuit breaker đang MỞ: quá nhiều lần tự-heal thất bại gần đây, "
                             "tạm dừng hành động tự động cho tới khi hết cooldown.",
     "execute_failed": "Thực thi hành động khắc phục thất bại.",

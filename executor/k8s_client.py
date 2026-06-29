@@ -27,9 +27,11 @@ class K8sClient:
         self.enabled = _HAS_K8S and not cfg.k8s_mock
         if not self.enabled:
             return
-        if in_cluster:
+        # Auto-detect: trong pod dùng SA token (in-cluster), ngoài laptop dùng kubeconfig.
+        # (Trước đây main.py hardcode in_cluster=False → load_kube_config() crash trong pod.)
+        try:
             k8s_config.load_incluster_config()
-        else:
+        except Exception:
             k8s_config.load_kube_config()
         self.apps = client.AppsV1Api()
         self.core = client.CoreV1Api()
@@ -64,21 +66,35 @@ class K8sClient:
         }
         return self._patch_deployment("RESTART_DEPLOYMENT", namespace, name, body, dry_run)
 
-    def patch_memory_limit(self, namespace: str, name: str, container: str,
+    def patch_memory_limit(self, namespace: str, name: str, container: str | None,
                            request_mb: int | None, limit_mb: int, dry_run: bool = False) -> dict:
         # strategic-merge patch: container khớp theo name → chỉ sửa resources.memory
         if not self.enabled:
             return self._stub("PATCH_MEMORY_LIMIT", namespace, name, dry_run, container=container)
+        # Resolve tên container THẬT để tránh strategic-merge tạo container "ma":
+        # nếu AI trả "main" nhưng workload là "podinfo", patch theo tên sai sẽ THÊM một
+        # container mới thiếu image → API reject / hỏng deployment.
+        try:
+            dep = self.apps.read_namespaced_deployment(name, namespace)
+            names = [c.name for c in dep.spec.template.spec.containers]
+        except ApiException as e:
+            return {"status": "FAILED", "action": "PATCH_MEMORY_LIMIT", "namespace": namespace,
+                    "name": name, "dry_run": dry_run,
+                    "reason": f"k8s api error {e.status}: {e.reason}"}
+        if not names:
+            return {"status": "FAILED", "action": "PATCH_MEMORY_LIMIT", "namespace": namespace,
+                    "name": name, "dry_run": dry_run, "reason": "deployment không có container"}
+        target = container if container in names else names[0]
         resources: dict[str, Any] = {"limits": {"memory": f"{limit_mb}Mi"}}
         if request_mb:
             resources["requests"] = {"memory": f"{request_mb}Mi"}
         body = {
             "spec": {"template": {"spec": {"containers": [
-                {"name": container, "resources": resources},
+                {"name": target, "resources": resources},
             ]}}}
         }
         return self._patch_deployment("PATCH_MEMORY_LIMIT", namespace, name, body, dry_run,
-                                      container=container)
+                                      container=target)
 
     def rollout_undo(self, namespace: str, name: str, dry_run: bool = False) -> dict:
         # undo = copy pod template của ReplicaSet revision trước → patch lại deployment

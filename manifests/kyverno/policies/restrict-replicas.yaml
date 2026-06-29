@@ -25,3 +25,17 @@ spec:
         pattern:
           spec:
             replicas: "<=10"
+    - name: min-replicas
+      match:
+        any:
+          - resources:
+              kinds:
+                - Deployment
+              namespaces:
+                - tenant-a
+                - tenant-b
+      validate:
+        message: "replicas phải >= 1 — cấm scale-to-zero (blast-radius guard CDO-02)"
+        pattern:
+          spec:
+            replicas: ">=1"

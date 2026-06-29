@@ -1,0 +1,36 @@
+# NetworkPolicy egress cho AI Engine — defense-in-depth Local Trust (deployment-contract §5.A).
+# AI Engine KHÔNG cần gọi K8s API hay pod khác trong VPC; chỉ cần:
+#   - DNS (kube-dns)
+#   - HTTPS ra ngoài VPC (Bedrock + S3/DynamoDB qua public range / gateway endpoint)
+# → chặn egress vào dải VPC 10.0.0.0/16 (gồm kube-apiserver + pod khác), trừ DNS.
+# Lưu ý: chỉ có hiệu lực nếu CNI enforce NetworkPolicy (Calico hoặc vpc-cni network-policy=on);
+# nếu chưa bật thì policy là no-op vô hại.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: restrict-ai-engine-egress
+  namespace: self-heal-system
+spec:
+  podSelector:
+    matchLabels:
+      app: ai-engine
+  policyTypes:
+    - Egress
+  egress:
+    # DNS trong cluster
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # HTTPS ra NGOÀI VPC (Bedrock/S3/DynamoDB) — chặn dải nội bộ 10.0.0.0/16 (API server + pod)
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/16
+      ports:
+        - protocol: TCP
+          port: 443

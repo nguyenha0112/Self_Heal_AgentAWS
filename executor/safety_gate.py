@@ -87,6 +87,9 @@ def _check_tenant_match(item: ActionPlanItem, tenant_namespace: str,
                         allowed_ns: set[str]) -> None:
     # TC-07: incident thuộc tenant-a nhưng AI target tenant-b → deny cross-tenant
     target_ns = item.namespace
+    if target_ns is None:
+        raise SafetyDenied("missing_target_namespace",
+                           "AI không trả params.namespace cho action_plan item")
     if target_ns != tenant_namespace:
         raise SafetyDenied(
             "denied_cross_tenant",

@@ -1,6 +1,11 @@
 # -------------------------------------------------------------------
 # S3 Audit Bucket — Object Lock GOVERNANCE Mode, 90-day retention
-# Admin có thể unlock với s3:BypassGovernanceRetention khi cần
+# Admin có thể unlock với s3:BypassGovernanceRetention khi cần.
+#
+# ⚠ DEVIATION: Deployment Contract §4.B yêu cầu COMPLIANCE mode. CDO-02 chọn
+#   GOVERNANCE cho sandbox capstone (teardown sạch + tránh khóa cứng 90 ngày).
+#   Lý do + đường nâng cấp production xem docs/08_adrs.md → ADR-010.
+#   Production: đổi mode = "COMPLIANCE" (1 dòng bên dưới) + bỏ quyền bypass.
 # -------------------------------------------------------------------
 
 resource "aws_s3_bucket" "audit" {
@@ -35,6 +40,26 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "audit" {
       sse_algorithm = "AES256"
     }
   }
+}
+
+# Bắt buộc HTTPS — từ chối mọi request không SSL (đồng nhất với state bucket).
+resource "aws_s3_bucket_policy" "audit" {
+  bucket = aws_s3_bucket.audit.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Sid       = "DenyNonSSL"
+      Effect    = "Deny"
+      Principal = "*"
+      Action    = "s3:*"
+      Resource = [
+        aws_s3_bucket.audit.arn,
+        "${aws_s3_bucket.audit.arn}/*",
+      ]
+      Condition = { Bool = { "aws:SecureTransport" = "false" } }
+    }]
+  })
+  depends_on = [aws_s3_bucket_public_access_block.audit]
 }
 
 resource "aws_s3_bucket_public_access_block" "audit" {

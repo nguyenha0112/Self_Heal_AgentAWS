@@ -10,8 +10,8 @@
       "ts": "2026-06-29T10:00:00.000Z",
       "tenant_id": "6c8b4b2b-4d45-4209-a1b4-4b532d56a31c",
       "service": "checkout-svc",
-      "signal_name": "minor_blip",
-      "value": 1,
+      "signal_name": "service_error_rate",
+      "value": 0.02,
       "labels": {
         "system": "K8S_NATIVE",
         "namespace": "tenant-a",

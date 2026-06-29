@@ -50,7 +50,7 @@ class UrgentExecutor(ActionExecutor):
             return self.k8s.restart_deployment(ns, name, dry_run=dry_run)
         if item.action == "PATCH_MEMORY_LIMIT":
             return self.k8s.patch_memory_limit(
-                ns, name, container=p.get("container", "main"),
+                ns, name, container=p.get("container"),
                 request_mb=p.get("memory_request_mb"), limit_mb=p["memory_limit_mb"],
                 dry_run=dry_run,
             )

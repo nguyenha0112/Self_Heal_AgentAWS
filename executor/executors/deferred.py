@@ -8,6 +8,7 @@ urgent path chưa xong (xem đánh giá 5-ngày). Để stub có chủ đích.
 """
 from __future__ import annotations
 
+import sys
 import time
 
 from models import DecideResponse
@@ -24,11 +25,17 @@ class DeferredExecutor(ActionExecutor):
         # 3. git commit + push (GitHub App token, KHÔNG dùng PAT tĩnh)
         # 4. poll ArgoCD Application: chờ Synced + Healthy trong verify_policy.window_seconds
         # 5. nếu timeout/SyncFailed → revert commit + escalate
+        print(
+            f"[deferred][STUB] {item.action} target={item.target} — GitOps CHƯA implement: "
+            "KHÔNG có commit/sync thật. status=COMPLETED chỉ để chạy hết loop ở mock; "
+            "với test LIVE action deferred này KHÔNG tác động cluster.",
+            file=sys.stderr,
+        )
         return ExecutionResult(
             action=item.action, target=item.target, status="COMPLETED",
             execution_time_seconds=0,
-            detail={"path": "deferred_gitops", "stub": True,
-                    "note": "implement Git→ArgoCD ở W12 hoặc hạ về designed-only"},
+            detail={"path": "deferred_gitops", "stub": True, "applied": False,
+                    "note": "DESIGNED-ONLY: implement Git→ArgoCD ở W12 (cần repo manifest + token push)"},
         )
 
     def rollback(self, decide: DecideResponse, snapshot) -> ExecutionResult:

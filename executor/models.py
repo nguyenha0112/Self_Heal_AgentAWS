@@ -77,8 +77,10 @@ class ActionPlanItem:
     params: dict[str, Any]           # bắt buộc có namespace
 
     @property
-    def namespace(self) -> str:
-        return self.params["namespace"]
+    def namespace(self) -> str | None:
+        # KHÔNG raise nếu AI quên params.namespace → safety gate deny fail-safe
+        # thay vì KeyError làm sập handle_incident.
+        return self.params.get("namespace")
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> "ActionPlanItem":

@@ -1,0 +1,92 @@
+# RBAC least-privilege cho CDO executor — khớp deployment-contract §3.D.
+# SA `tf3-cdo-controller` (self-heal-system) + Role/RoleBinding cho TỪNG tenant namespace.
+# IRSA annotation điền sau khi terraform apply (REPLACE_WITH_EXECUTOR_ROLE_ARN).
+# Verb tối thiểu đủ 5 action; KHÔNG delete deployment/namespace, KHÔNG `update` (chỉ patch),
+# secrets CHỈ để ROTATE_SECRET. (Trước đây file này lệch §3.D: thừa `update`, thiếu secrets/scale.)
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: tf3-cdo-controller
+  namespace: self-heal-system
+  annotations:
+    eks.amazonaws.com/role-arn: REPLACE_WITH_EXECUTOR_ROLE_ARN
+---
+# ===================== tenant-a =====================
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: cdo-executor-role
+  namespace: tenant-a
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "patch"]      # RESTART / PATCH_MEMORY / ROLLOUT_UNDO (KHÔNG delete/update)
+  - apiGroups: ["apps"]
+    resources: ["deployments/scale"]
+    verbs: ["get", "patch"]              # SCALE_REPLICAS
+  - apiGroups: ["apps"]
+    resources: ["replicasets"]
+    verbs: ["get", "list"]              # xác định revision cho ROLLOUT_UNDO
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get"]                      # escalation bundle + telemetry xác thực
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "create", "delete"] # CHỈ cho ROTATE_SECRET
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: cdo-executor-binding
+  namespace: tenant-a
+subjects:
+  - kind: ServiceAccount
+    name: tf3-cdo-controller
+    namespace: self-heal-system
+roleRef:
+  kind: Role
+  apiGroup: rbac.authorization.k8s.io
+  name: cdo-executor-role
+---
+# ===================== tenant-b =====================
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: cdo-executor-role
+  namespace: tenant-b
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "patch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments/scale"]
+    verbs: ["get", "patch"]
+  - apiGroups: ["apps"]
+    resources: ["replicasets"]
+    verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "create", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: cdo-executor-binding
+  namespace: tenant-b
+subjects:
+  - kind: ServiceAccount
+    name: tf3-cdo-controller
+    namespace: self-heal-system
+roleRef:
+  kind: Role
+  apiGroup: rbac.authorization.k8s.io
+  name: cdo-executor-role

@@ -16,6 +16,7 @@ from __future__ import annotations
 import json
 import sys
 import time
+import uuid
 
 import audit as A
 import escalation as E
@@ -82,7 +83,11 @@ class Executor:
                 return self._escalate(log, ctx, "circuit_breaker_open")
 
             # ---------- [2] DECIDE (idempotency lock trước) ----------
-            idem_key = new_uuid()
+            # Key DETERMINISTIC theo (tenant, correlation_id): retry CÙNG incident → CÙNG key
+            # → DynamoDB conditional-write dedupe đúng. (Trước dùng new_uuid() ngẫu nhiên nên
+            # lock không bao giờ trùng → dedupe vô hiệu.)
+            idem_key = str(uuid.uuid5(uuid.NAMESPACE_URL,
+                                      f"{self.cfg.tenant_id}:{correlation_id}"))
             if not self.locks.acquire(idem_key):
                 log.event(A.LOCK_DENIED, idempotency_key=idem_key)
                 return A.LOCK_DENIED

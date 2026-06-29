@@ -33,10 +33,22 @@ def _scenario_of(telemetry: list | None, default: str = "default") -> str:
     return default
 
 
+def _infer_scenario(tw: list) -> str:
+    """Khi không có labels.scenario (watch-mode thật) → suy fault từ signal_name enum."""
+    names = {s.get("signal_name") for s in tw if isinstance(s, dict)}
+    if "pod_oom_event" in names:
+        return "oom_kill"          # → PATCH_MEMORY_LIMIT
+    if "container_restart_count" in names:
+        return "crashloop"         # → RESTART_DEPLOYMENT
+    if "service_unhealthy" in names:
+        return "service_unhealthy"  # → RESTART_DEPLOYMENT
+    return "default"
+
+
 def _detect(req: dict, cid: str) -> dict:
     tw = req.get("telemetry_window") or [{}]
     labels = (tw[0] or {}).get("labels", {})
-    sc = labels.get("scenario", "default")
+    sc = labels.get("scenario") or _infer_scenario(tw)
     low = sc == "low_conf"
     return {
         "anomaly_detected": True,
@@ -151,5 +163,6 @@ class Handler(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    print("mock AI on http://127.0.0.1:8080 (Ctrl-C to stop)")
-    HTTPServer(("127.0.0.1", 8080), Handler).serve_forever()
+    # bind 0.0.0.0 để reachable qua K8s Service từ pod khác (127.0.0.1 chỉ loopback trong pod)
+    print("mock AI on http://0.0.0.0:8080 (Ctrl-C to stop)")
+    HTTPServer(("0.0.0.0", 8080), Handler).serve_forever()
