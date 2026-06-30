@@ -77,4 +77,4 @@ jobs:
         run: |
           curl -sSL -o gitleaks.tar.gz https://github.com/gitleaks/gitleaks/releases/download/v8.18.4/gitleaks_8.18.4_linux_x64.tar.gz
           tar -xzf gitleaks.tar.gz gitleaks
-          ./gitleaks detect --source=. --config=.gitleaks.toml --redact --no-banner
+          ./gitleaks detect --source=. --config=.gitleaks.toml --redact --no-banner --log-opts="HEAD"
