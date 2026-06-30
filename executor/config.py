@@ -78,6 +78,12 @@ class Config:
     idempotency_table: str = _env("CDO_IDEMPOTENCY_TABLE", "cdo-idempotency-dev")
     idempotency_ttl_seconds: int = _env_int("CDO_IDEMPOTENCY_TTL_S", 86400)  # 24h
     audit_bucket: str = _env("CDO_AUDIT_BUCKET", "")  # rỗng → audit chỉ ra stdout (dev)
+    telemetry_queue_url: str = _env("CDO_TELEMETRY_QUEUE_URL", "")
+    telemetry_dlq_url: str = _env("CDO_TELEMETRY_DLQ_URL", "")
+    telemetry_buffer_enabled: bool = _env("CDO_TELEMETRY_BUFFER_ENABLED", "true").lower() == "true"
+    telemetry_batch_size: int = _env_int("CDO_TELEMETRY_BATCH_SIZE", 50)
+    telemetry_max_retries: int = _env_int("CDO_TELEMETRY_MAX_RETRIES", 3)
+    telemetry_backoff_s: float = _env_float("CDO_TELEMETRY_BACKOFF_S", 1.0)
 
     # --- Pod Status Watcher (Option 1 telemetry collector) ---
     poll_interval_s: int = _env_int("CDO_POLL_INTERVAL_S", 30)

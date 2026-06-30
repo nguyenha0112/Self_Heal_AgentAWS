@@ -42,6 +42,13 @@ class AIUnavailable(AIError):          # 503 — upstream down, escalate, KHÔNG
     audit_reason = "ai_unavailable_escalated"
 
 
+class TelemetryContractError(Exception):
+    """Telemetry không qua normalize/validate theo contract."""
+    def __init__(self, reason: str):
+        super().__init__(reason)
+        self.reason = reason
+
+
 class SafetyDenied(Exception):
     """Safety gate từ chối action. reason là machine-readable (vào audit)."""
     def __init__(self, reason: str, detail: str = ""):

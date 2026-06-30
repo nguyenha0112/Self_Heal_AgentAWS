@@ -25,19 +25,23 @@ import watcher as W
 from ai_client import AIClient, new_uuid
 from circuit_breaker import CircuitBreaker
 from config import CONFIG
-from errors import AIConflict, AIError, SafetyDenied
+from errors import AIConflict, AIError, SafetyDenied, TelemetryContractError
 from executors import pick
 from idempotency import IdempotencyLock
 from k8s_client import K8sClient
 from models import DetectResponse
 from pre_decide_gate import FlapTracker, evaluate
 from safety_gate import check as safety_check
+from telemetry_adapter import TelemetryAdapter
+from telemetry_forwarder import TelemetryForwarder
 
 
 class Executor:
     def __init__(self, cfg=CONFIG):
         self.cfg = cfg
         self.ai = AIClient(cfg)
+        self.adapter = TelemetryAdapter(cfg)
+        self.forwarder = TelemetryForwarder(self.ai, cfg)
         self.locks = IdempotencyLock(cfg)
         self.flap = FlapTracker()
         self.breaker = CircuitBreaker(cfg)
@@ -57,9 +61,14 @@ class Executor:
                                 namespace=tenant_namespace, telemetry_window=telemetry_window)
 
         try:
+            normalized_window = self.adapter.build_window(telemetry_window)
+            log.event("telemetry_normalized", point_count=len(normalized_window))
+            self.forwarder.enqueue_detect_request(normalized_window, correlation_id)
+            log.event("telemetry_buffered", point_count=len(normalized_window))
+
             # ---------- [1] DETECT ----------
             log.event(A.DETECT_CALLED)
-            detect: DetectResponse = self.ai.detect(telemetry_window, correlation_id)
+            detect: DetectResponse = self.forwarder.forward_detect_once()
             correlation_id = detect.correlation_id or correlation_id
             ctx.correlation_id = correlation_id
             ctx.detect = detect
@@ -147,6 +156,8 @@ class Executor:
         except AIConflict:
             log.event(A.LOCK_DENIED, reason="ai_409_conflict")
             return A.LOCK_DENIED
+        except TelemetryContractError as e:
+            return self._escalate(log, ctx, e.reason)
         except AIError as e:
             # 400/401/403/500/503/timeout → fail-safe escalate, KHÔNG execute
             if self.breaker.record_failure():
