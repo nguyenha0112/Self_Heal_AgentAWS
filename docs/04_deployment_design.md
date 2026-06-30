@@ -141,7 +141,7 @@ Smoke test là phần bắt buộc vì Self-Heal Engine không chỉ cần deplo
 
 - EKS cluster và 3 namespace `platform`, `tenant-a`, `tenant-b` tồn tại đúng.
 - RBAC deny được cross-tenant access ngoài scope.
-- Prometheus, Alertmanager và Grafana đã Ready.
+- CloudWatch log path và alarms đã có trong Terraform; Prometheus, Grafana và OpenTelemetry Collector là stack in-cluster được triển khai qua Helm trong module `observability`. Alertmanager không được bật ở pha hiện tại.
 - CloudWatch audit log path hoạt động.
 - Executor hoặc webhook receiver trả health check thành công.
 - Nếu AI endpoint sẵn sàng, đường gọi private endpoint và auth flow phải được verify.
@@ -360,7 +360,7 @@ CDO executor chỉ được write vào `manifests/<tenant>/` của chính tenant
 | Kyverno bootstrap | Terraform Helm release | namespace `kyverno`, Kyverno install |
 | AppProject + Application | ArgoCD | Scoped per tenant |
 | Namespace + RBAC | ArgoCD (wave 0–1) | `platform`, `tenant-a`, `tenant-b`, `self-heal-system` |
-| Observability stack | ArgoCD (wave 2) | Prometheus, Alertmanager, Grafana |
+| Observability stack | Terraform Helm releases sau khi EKS sẵn sàng | Prometheus, Grafana, OpenTelemetry Collector |
 | CDO executor / collector | ArgoCD (wave 3) | namespace `platform` |
 | AI Engine deployment | ArgoCD (wave 3) | namespace `self-heal-system` — CDO deploy từ OCI image AI team bàn giao (W12) |
 | Sample workloads | ArgoCD (wave 4) | `tenant-a`, `tenant-b` |
@@ -372,7 +372,7 @@ CDO executor chỉ được write vào `manifests/<tenant>/` của chính tenant
 |---|---|
 | 0 | Namespace `platform`, `tenant-a`, `tenant-b`, `self-heal-system`; baseline labels/annotations |
 | 1 | RBAC, ServiceAccounts, IRSA bindings, configmaps; NetworkPolicy (allow-executor-to-ai) |
-| 2 | Observability stack: Prometheus, Alertmanager, Grafana |
+| 2 | Observability stack: Prometheus, Grafana, OpenTelemetry Collector |
 | 3 | CDO executor, telemetry collector; AI Engine Deployment + HPA (sau khi AI team bàn giao OCI image) |
 | 4 | Tenant sample workloads và test scenarios |
 
@@ -545,7 +545,7 @@ Bảng stack đề xuất:
 | Component | Tool |
 |---|---|
 | Metrics | Prometheus + kube-state-metrics + node-exporter |
-| Alerts | Alertmanager |
+| Alerts | CloudWatch Alarms |
 | Logs | CloudWatch Logs |
 | Dashboards | Grafana |
 | Traces | OpenTelemetry -> AWS X-Ray hoặc Jaeger |
@@ -562,7 +562,7 @@ CDO-02 ưu tiên hướng quan sát sau:
 
 ```text
 EKS workloads
--> Prometheus / CloudWatch / OpenTelemetry
+-> Prometheus / CloudWatch / OpenTelemetry Collector
 -> Alerting + dashboards + audit logs
 -> deployment gate / smoke test / verify signal
 ```

@@ -12,6 +12,8 @@ Angle của CDO-02 là **K8s-heavy / Kubernetes Workflow Orchestration**. Trọn
 
 ![architectv2](image-1.png)
 
+> Note: `image-1.png` la so do kien truc moi nhat de dinh huong implementation. Trong repo hien tai, huong trien khai observability duoc chot la Prometheus + Grafana + OpenTelemetry Collector; Alertmanager khong duoc deploy trong pha nay.
+
 ## 2. Đọc nhanh: hệ thống này chạy như thế nào?
 
 Nói ngắn gọn, CDO-02 xây một "người điều phối" nằm giữa alert, AI và Kubernetes:

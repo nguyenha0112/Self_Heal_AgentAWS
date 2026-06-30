@@ -121,11 +121,11 @@ Scope cost CDO-02 bao gồm: VPC/networking, EKS cluster, observability stack, a
 
 ### 3.10 Observability Stack (In-Cluster)
 
-Components chạy trong EKS cluster (Prometheus, Alertmanager, Grafana, OTel Collector) không phát sinh chi phí AWS riêng - cost đã gộp vào EC2 node của EKS ở mục 3.1.
+Components chạy trong EKS cluster (Prometheus, Grafana, OTel Collector) không phát sinh chi phí AWS riêng - cost đã gộp vào EC2 node của EKS ở mục 3.1. Alertmanager không được triển khai trong repo hiện tại.
 
 | Component | Tài nguyên ước tính | Cost phát sinh |
 |---|---|---|
-| Prometheus + Alertmanager | ~500m CPU, ~512MB RAM | Included trong EKS nodes |
+| Prometheus | ~400m CPU, ~384MB RAM | Included trong EKS nodes |
 | Grafana | ~100m CPU, ~128MB RAM | Included trong EKS nodes |
 | OTel Collector | ~200m CPU, ~256MB RAM | Included trong EKS nodes |
 | kube-state-metrics + node-exporter | ~50m CPU, ~64MB RAM | Included trong EKS nodes |
@@ -171,7 +171,7 @@ Components chạy trong EKS cluster (Prometheus, Alertmanager, Grafana, OTel Col
 | SQS Free Tier | Tiết kiệm ~$4/10 ngày | Sandbox volume nằm trong free tier |
 | DynamoDB On-Demand (không provisioned) | Tiết kiệm ~$5/10 ngày | On-demand thích hợp cho traffic không đều |
 | S3 Athena thay vì OpenSearch | Tiết kiệm ~$30/10 ngày | Query by correlation_id đủ dùng Athena |
-| In-cluster Prometheus thay vì Amazon Managed Prometheus | Tiết kiệm ~$20/10 ngày | Sandbox không cần managed service |
+| In-cluster Prometheus + Grafana thay vì Amazon Managed Prometheus/Grafana | Tiết kiệm ~$20/10 ngày | Sandbox không cần managed service |
 | EKS node desired=2 (không over-provision) | Baseline cost thấp | Scale up chỉ khi load test |
 | **VPC Gateway Endpoint S3 + DynamoDB** (W12) | Giảm NAT data charge cho S3/DynamoDB traffic; endpoint bản thân FREE | Implemented trong `infra/modules/vpc/main.tf` — traffic audit write + TF state + idempotency không qua NAT |
 | **CloudWatch audit log retention 30→7 ngày** (W12) | Giảm log storage cost; S3 Object Lock 90 ngày là source of truth | Implemented trong `infra/modules/observability/main.tf`; không ảnh hưởng compliance rubric |

@@ -17,7 +17,7 @@ terraform {
   }
 
   backend "s3" {
-    bucket       = "cdo-tf-state-012619468490-ap-southeast-1-dev"
+    bucket       = "cdo-tf-state-938145531618-ap-southeast-1-dev"
     key          = "envs/dev/terraform.tfstate"
     region       = "ap-southeast-1"
     use_lockfile = true # native S3 locking (Terraform >= 1.10) — không cần DynamoDB

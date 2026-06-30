@@ -87,3 +87,77 @@ resource "aws_cloudwatch_metric_alarm" "dlq_malformed_rate" {
     }
   }
 }
+
+resource "helm_release" "kube_prometheus_stack" {
+  count            = var.enable_prometheus_stack ? 1 : 0
+  name             = "kube-prometheus-stack"
+  repository       = "https://prometheus-community.github.io/helm-charts"
+  chart            = "kube-prometheus-stack"
+  namespace        = "monitoring"
+  create_namespace = true
+
+  values = [yamlencode({
+    grafana = {
+      enabled = var.enable_grafana
+    }
+    alertmanager = {
+      enabled = var.enable_alertmanager
+    }
+    prometheus = {
+      prometheusSpec = {
+        retention                               = "7d"
+        serviceMonitorSelectorNilUsesHelmValues = false
+      }
+    }
+  })]
+}
+
+resource "helm_release" "otel_collector" {
+  count            = var.enable_otel_collector ? 1 : 0
+  name             = "opentelemetry-collector"
+  repository       = "https://open-telemetry.github.io/opentelemetry-helm-charts"
+  chart            = "opentelemetry-collector"
+  namespace        = "monitoring"
+  create_namespace = true
+
+  values = [yamlencode({
+    mode = "deployment"
+    config = {
+      receivers = {
+        otlp = {
+          protocols = {
+            grpc = {}
+            http = {}
+          }
+        }
+      }
+      processors = {
+        batch = {}
+      }
+      exporters = {
+        logging = {
+          verbosity = "normal"
+        }
+      }
+      service = {
+        pipelines = {
+          traces = {
+            receivers  = ["otlp"]
+            processors = ["batch"]
+            exporters  = ["logging"]
+          }
+          metrics = {
+            receivers  = ["otlp"]
+            processors = ["batch"]
+            exporters  = ["logging"]
+          }
+          logs = {
+            receivers  = ["otlp"]
+            processors = ["batch"]
+            exporters  = ["logging"]
+          }
+        }
+      }
+    }
+  })]
+}
