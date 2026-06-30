@@ -1,0 +1,45 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: self-heal-platform-rules
+  namespace: monitoring
+  labels:
+    release: kube-prometheus-stack
+spec:
+  groups:
+    - name: self-heal-workloads
+      rules:
+        - alert: TenantADeploymentUnavailable
+          expr: kube_deployment_status_replicas_unavailable{namespace="tenant-a",deployment="cdo-sample-api"} > 0
+          for: 2m
+          labels:
+            severity: critical
+            tenant: tenant-a
+          annotations:
+            summary: Tenant A deployment has unavailable replicas
+            description: cdo-sample-api has unavailable replicas for more than 2 minutes.
+        - alert: TenantBDeploymentUnavailable
+          expr: kube_deployment_status_replicas_unavailable{namespace="tenant-b",deployment="notification-service"} > 0
+          for: 2m
+          labels:
+            severity: critical
+            tenant: tenant-b
+          annotations:
+            summary: Tenant B deployment has unavailable replicas
+            description: notification-service has unavailable replicas for more than 2 minutes.
+        - alert: TenantWorkloadRestartSpike
+          expr: increase(kube_pod_container_status_restarts_total{namespace=~"tenant-a|tenant-b"}[10m]) > 2
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: Restart spike detected in tenant workload
+            description: Restart count increased by more than 2 in the last 10 minutes.
+        - alert: TenantWorkloadOOMKilled
+          expr: max_over_time(kube_pod_container_status_last_terminated_reason{namespace=~"tenant-a|tenant-b",reason="OOMKilled"}[10m]) > 0
+          for: 0m
+          labels:
+            severity: critical
+          annotations:
+            summary: OOMKilled detected in tenant workload
+            description: At least one tenant workload container was OOMKilled in the last 10 minutes.

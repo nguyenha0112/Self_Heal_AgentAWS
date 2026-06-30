@@ -117,7 +117,7 @@ Deploy chia lớp để cô lập blast-radius. **Hai cơ chế:** Terraform (AW
 2) eks            → cluster + node group   (phụ thuộc vpc)
 3) iam            → IRSA executor + AI engine, least-privilege
 4) audit          → S3 Object Lock (Governance), DynamoDB idempotency, SQS + DLQ
-5) observability  → CloudWatch log groups, alarms
+5) observability  → CloudWatch log groups + Prometheus/Grafana
 6) kyverno        → Helm release (admission layer 3)
 7) argocd         → Helm release (GitOps engine)
 ```

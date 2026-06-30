@@ -28,11 +28,7 @@ spec:
           envFrom:
             - configMapRef:
                 name: cdo-executor-config
-          # MVP: giữ pod sống để demo (exec scenario vào pod):
-          #   kubectl exec -n self-heal-system deploy/cdo-self-heal-executor -- \
-          #     python main.py scenarios/tc01_service_stuck.json
-          # W12 (A-TODO): thay bằng server mode (HTTP ingestion / SQS consumer) + probe /health.
-          command: ["sleep", "infinity"]
+          command: ["python", "main.py", "--watch"]
           resources:
             requests:
               cpu: 100m

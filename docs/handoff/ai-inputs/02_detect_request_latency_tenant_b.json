@@ -1,0 +1,31 @@
+{
+  "correlation_id": "12222222-2222-4222-8222-222222222222",
+  "idempotency_key": "22222222-2222-4222-8222-222222222222",
+  "dry_run_mode": false,
+  "telemetry_window": [
+    {
+      "ts": "2026-06-30T14:05:00.000Z",
+      "tenant_id": "6c8b4b2b-4d45-4209-a1b4-4b532d56a31c",
+      "service": "notification-svc",
+      "signal_name": "service_latency_p95",
+      "value": 2850,
+      "labels": {
+        "system": "K8S_NATIVE",
+        "namespace": "tenant-b",
+        "deployment": "notification-service"
+      }
+    },
+    {
+      "ts": "2026-06-30T14:05:08.000Z",
+      "tenant_id": "6c8b4b2b-4d45-4209-a1b4-4b532d56a31c",
+      "service": "notification-svc",
+      "signal_name": "service_unhealthy",
+      "value": "Readiness probe failed",
+      "labels": {
+        "system": "K8S_NATIVE",
+        "namespace": "tenant-b",
+        "deployment": "notification-service"
+      }
+    }
+  ]
+}

@@ -1,0 +1,37 @@
+{
+  "correlation_id": "16666666-6666-4666-8666-666666666666",
+  "idempotency_key": "26666666-6666-4666-8666-666666666666",
+  "dry_run_mode": false,
+  "action_executed": {
+    "action": "RESTART_DEPLOYMENT",
+    "target": "deployment/notification-service",
+    "status": "COMPLETED",
+    "execution_time_seconds": 24
+  },
+  "post_telemetry_window": [
+    {
+      "ts": "2026-06-30T14:12:00.000Z",
+      "tenant_id": "6c8b4b2b-4d45-4209-a1b4-4b532d56a31c",
+      "service": "notification-svc",
+      "signal_name": "service_latency_p95",
+      "value": 420,
+      "labels": {
+        "system": "K8S_NATIVE",
+        "namespace": "tenant-b",
+        "deployment": "notification-service"
+      }
+    },
+    {
+      "ts": "2026-06-30T14:12:10.000Z",
+      "tenant_id": "6c8b4b2b-4d45-4209-a1b4-4b532d56a31c",
+      "service": "notification-svc",
+      "signal_name": "service_unhealthy",
+      "value": "false",
+      "labels": {
+        "system": "K8S_NATIVE",
+        "namespace": "tenant-b",
+        "deployment": "notification-service"
+      }
+    }
+  ]
+}

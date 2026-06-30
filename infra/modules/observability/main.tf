@@ -6,8 +6,8 @@ resource "aws_cloudwatch_log_group" "executor" {
 resource "aws_cloudwatch_log_group" "self_heal_audit" {
   name              = "/cdo/${var.environment}/audit"
   retention_in_days = 7
-  # S3 Object Lock (GOVERNANCE, 90 ngày) là source of truth cho audit.
-  # CloudWatch chỉ phục vụ query real-time — 7 ngày là đủ.
+  # S3 Object Lock (GOVERNANCE, 90 ngay) la source of truth cho audit.
+  # CloudWatch chi phuc vu query real-time, 7 ngay la du.
 }
 
 resource "aws_cloudwatch_log_group" "argocd" {
@@ -20,74 +20,6 @@ resource "aws_cloudwatch_log_group" "kyverno" {
   retention_in_days = 7
 }
 
-# Alarm: executor log errors
-resource "aws_cloudwatch_metric_alarm" "executor_errors" {
-  alarm_name          = "cdo-executor-errors-${var.environment}"
-  comparison_operator = "GreaterThanThreshold"
-  evaluation_periods  = 1
-  metric_name         = "ErrorCount"
-  namespace           = "CDO/Executor"
-  period              = 60
-  statistic           = "Sum"
-  threshold           = 5
-  alarm_description   = "CDO executor error rate > 5 trong 1 phút — check audit log"
-  treat_missing_data  = "notBreaching"
-}
-
-# Alarm: Kyverno policy deny spike
-resource "aws_cloudwatch_metric_alarm" "kyverno_deny_spike" {
-  alarm_name          = "cdo-kyverno-deny-spike-${var.environment}"
-  comparison_operator = "GreaterThanThreshold"
-  evaluation_periods  = 1
-  metric_name         = "PolicyDenyCount"
-  namespace           = "CDO/Kyverno"
-  period              = 300
-  statistic           = "Sum"
-  threshold           = 3
-  alarm_description   = "Kyverno deny > 3 trong 5 phút — có thể là unsafe action attempt"
-  treat_missing_data  = "notBreaching"
-}
-
-# Alarm: DLQ malformed telemetry rate > 0.5% trong 5 phút
-# Requirement: telemetry contract-new-2 Section 2.5.B
-resource "aws_cloudwatch_metric_alarm" "dlq_malformed_rate" {
-  alarm_name          = "cdo-dlq-malformed-rate-${var.environment}"
-  comparison_operator = "GreaterThanThreshold"
-  evaluation_periods  = 1
-  threshold           = 0.5
-  alarm_description   = "DLQ malformed telemetry > 0.5% tổng lưu lượng trong 5 phút (telemetry contract-new-2 §2.5.B)"
-  treat_missing_data  = "notBreaching"
-
-  metric_query {
-    id          = "malformed_rate"
-    expression  = "IF(total_msgs > 0, dlq_msgs / total_msgs * 100, 0)"
-    label       = "DLQ Malformed Rate (%)"
-    return_data = true
-  }
-
-  metric_query {
-    id = "dlq_msgs"
-    metric {
-      namespace   = "AWS/SQS"
-      metric_name = "NumberOfMessagesSent"
-      dimensions  = { QueueName = var.dlq_queue_name }
-      period      = 300
-      stat        = "Sum"
-    }
-  }
-
-  metric_query {
-    id = "total_msgs"
-    metric {
-      namespace   = "AWS/SQS"
-      metric_name = "NumberOfMessagesSent"
-      dimensions  = { QueueName = var.sqs_queue_name }
-      period      = 300
-      stat        = "Sum"
-    }
-  }
-}
-
 resource "helm_release" "kube_prometheus_stack" {
   count            = var.enable_prometheus_stack ? 1 : 0
   name             = "kube-prometheus-stack"
@@ -98,7 +30,18 @@ resource "helm_release" "kube_prometheus_stack" {
 
   values = [yamlencode({
     grafana = {
-      enabled = var.enable_grafana
+      enabled                   = var.enable_grafana
+      adminPassword             = "admin123!"
+      defaultDashboardsTimezone = "browser"
+      sidecar = {
+        dashboards = {
+          enabled = true
+          label   = "grafana_dashboard"
+        }
+        datasources = {
+          enabled = true
+        }
+      }
     }
     alertmanager = {
       enabled = var.enable_alertmanager
@@ -107,7 +50,12 @@ resource "helm_release" "kube_prometheus_stack" {
       prometheusSpec = {
         retention                               = "7d"
         serviceMonitorSelectorNilUsesHelmValues = false
+        podMonitorSelectorNilUsesHelmValues     = false
+        ruleSelectorNilUsesHelmValues           = false
       }
+    }
+    prometheusOperator = {
+      enabled = true
     }
   })]
 }
@@ -123,10 +71,8 @@ resource "helm_release" "otel_collector" {
   values = [yamlencode({
     mode = "deployment"
     image = {
-      repository = "ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-k8s"
-    }
-    command = {
-      name = "otelcol-k8s"
+      repository = "otel/opentelemetry-collector-k8s"
+      tag        = "0.102.1"
     }
     config = {
       receivers = {
@@ -161,6 +107,28 @@ resource "helm_release" "otel_collector" {
             receivers  = ["otlp"]
             processors = ["batch"]
             exporters  = ["debug"]
+          }
+        }
+        telemetry = {
+          metrics = {
+            readers = [{
+              pull = {
+                exporter = {
+                  prometheus = {
+                    host = "$${env:MY_POD_IP}"
+                    port = 8889
+                  }
+                }
+              }
+            }]
+          }
+          resource = {
+            "host.name"          = "$${env:OTEL_K8S_NODE_NAME}"
+            "k8s.namespace.name" = "$${env:OTEL_K8S_NAMESPACE}"
+            "k8s.node.ip"        = "$${env:OTEL_K8S_NODE_IP}"
+            "k8s.node.name"      = "$${env:OTEL_K8S_NODE_NAME}"
+            "k8s.pod.ip"         = "$${env:OTEL_K8S_POD_IP}"
+            "k8s.pod.name"       = "$${env:OTEL_K8S_POD_NAME}"
           }
         }
       }
