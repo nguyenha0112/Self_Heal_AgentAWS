@@ -11,7 +11,9 @@ spec:
   source:
     repoURL: https://github.com/nguyenha0112/Self_Heal_AgentAWS.git
     targetRevision: HEAD
-    path: manifests/workloads/tenant-a
+    path: manifests/workloads
+    directory:
+      include: tenant-a-sample-app.yaml
 
   destination:
     server: https://kubernetes.default.svc

@@ -8,8 +8,10 @@
 #   Production: đổi mode = "COMPLIANCE" (1 dòng bên dưới) + bỏ quyền bypass.
 # -------------------------------------------------------------------
 
+data "aws_caller_identity" "current" {}
+
 resource "aws_s3_bucket" "audit" {
-  bucket        = "cdo-audit-${var.cluster_name}-${var.environment}"
+  bucket        = "cdo-audit-${data.aws_caller_identity.current.account_id}-${var.cluster_name}-${var.environment}"
   force_destroy = false
 
   object_lock_enabled = true
