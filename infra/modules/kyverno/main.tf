@@ -25,4 +25,29 @@ resource "helm_release" "kyverno" {
     name  = "reportsController.replicas"
     value = "1"
   }
+
+  set {
+    name  = "policyReportsCleanup.enabled"
+    value = "false"
+  }
+
+  set {
+    name  = "cleanupJobs.admissionReports.enabled"
+    value = "false"
+  }
+
+  set {
+    name  = "cleanupJobs.clusterAdmissionReports.enabled"
+    value = "false"
+  }
+
+  set {
+    name  = "cleanupJobs.ephemeralReports.enabled"
+    value = "false"
+  }
+
+  set {
+    name  = "cleanupJobs.clusterEphemeralReports.enabled"
+    value = "false"
+  }
 }
