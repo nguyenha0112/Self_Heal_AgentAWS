@@ -9,8 +9,7 @@ spec:
   project: tenant-a
 
   source:
-    # TODO: thay bằng Git repo thật của CDO-02
-    repoURL: https://github.com/tuu-ngo/TF3-Self-Heal-Agent-AWS.git
+    repoURL: https://github.com/nguyenha0112/Self_Heal_AgentAWS.git
     targetRevision: HEAD
     path: manifests/workloads/tenant-a
 
@@ -18,7 +17,6 @@ spec:
     server: https://kubernetes.default.svc
     namespace: tenant-a
 
-  # Không auto-sync — executor tạo commit, ArgoCD sync khi được trigger
   syncPolicy:
     automated:
       prune: false

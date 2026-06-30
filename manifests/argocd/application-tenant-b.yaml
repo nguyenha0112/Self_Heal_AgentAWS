@@ -9,8 +9,7 @@ spec:
   project: tenant-b
 
   source:
-    # TODO: thay bằng Git repo thật của CDO-02
-    repoURL: https://github.com/tuu-ngo/TF3-Self-Heal-Agent-AWS.git
+    repoURL: https://github.com/nguyenha0112/Self_Heal_AgentAWS.git
     targetRevision: HEAD
     path: manifests/workloads/tenant-b
 

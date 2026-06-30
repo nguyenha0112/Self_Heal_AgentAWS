@@ -1,6 +1,5 @@
 from telemetry_contract import normalize_window
 
-
 TENANT = "6c8b4b2b-4d45-4209-a1b4-4b532d56a31c"
 
 
