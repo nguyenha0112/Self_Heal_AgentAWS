@@ -122,7 +122,7 @@ Review plan — expected changes:
 - `module.iam`: IAM role + policy (NEW)
 - `module.kyverno`: Helm release kyverno (NEW)
 - `module.argocd`: Helm release argo-cd (NEW)
-- `module.observability`: thêm log groups + alarms (UPDATE)
+- `module.observability`: thêm log groups + Prometheus/Grafana/OpenTelemetry stack (UPDATE)
 - `module.eks`: thêm enable_irsa + cluster_addons (UPDATE — sẽ không recreate cluster)
 
 ---

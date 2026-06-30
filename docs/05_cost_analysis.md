@@ -89,10 +89,10 @@ Scope cost CDO-02 bao gồm: VPC/networking, EKS cluster, observability stack, a
 |---|---|---|---|---|
 | CloudWatch Logs Ingestion | executor boto3 PutLogEvents trực tiếp (không có FluentBit/CWAgent) — nằm trong free tier 5GB/tháng | $0.50/GB (sau free tier) | ~$0.00 | **~$0.00** |
 | CloudWatch Logs Storage | 5 log groups: 4 × 7 ngày retention, 1 × 7 ngày retention (audit — đã giảm từ 30) | $0.03/GB/month | negligible | **~$0.01** |
-| CloudWatch Alarms | 3 alarms (executor error, Kyverno deny, DLQ rate) | $0.10/alarm/month | $0.01 | **$0.10** |
+| CloudWatch Alarms | Không triển khai | $0.10/alarm/month | $0.00 | **$0.00** |
 | **Subtotal CloudWatch** | | | **~$0.01/ngày** | **~$0.11** |
 
-> Ghi chú: Không có FluentBit DaemonSet hay CloudWatch Agent trong Terraform — log ingestion chỉ từ executor code gọi `boto3 PutLogEvents` trực tiếp. Volume thực tế nằm trong free tier 5GB/tháng. Tổng 3 alarms trong Terraform (không phải 10 như forecast ban đầu). Audit log group đã giảm retention từ 30 → 7 ngày; S3 Object Lock (90 ngày) là source of truth theo contract.
+> Ghi chú: Không có FluentBit DaemonSet hay CloudWatch Agent trong Terraform — log ingestion chỉ từ executor code gọi `boto3 PutLogEvents` trực tiếp. CloudWatch chỉ giữ vai trò log/audit query ngắn hạn; monitoring và dashboard chính nằm ở Prometheus + Grafana. Audit log group đã giảm retention từ 30 → 7 ngày; S3 Object Lock (90 ngày) là source of truth theo contract.
 
 ### 3.7 Amazon ECR - Container Images
 

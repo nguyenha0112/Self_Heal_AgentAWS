@@ -48,7 +48,7 @@ infra/
     vpc/                 # VPC, subnets, route tables, security groups
     eks/                 # EKS cluster, node groups, cluster access baseline
     iam/                 # IRSA executor + AI Engine, least-privilege policies
-    observability/       # CloudWatch log groups, alarms (executor errors, Kyverno deny, DLQ rate)
+    observability/       # CloudWatch log groups + in-cluster Prometheus/Grafana/OpenTelemetry
     audit/               # S3 Object Lock (Governance), DynamoDB idempotency, SQS + DLQ
     kyverno/             # Kyverno Helm release (admission control layer 3)
     argocd/              # ArgoCD Helm release (GitOps engine)
@@ -141,7 +141,7 @@ Smoke test là phần bắt buộc vì Self-Heal Engine không chỉ cần deplo
 
 - EKS cluster và 3 namespace `platform`, `tenant-a`, `tenant-b` tồn tại đúng.
 - RBAC deny được cross-tenant access ngoài scope.
-- CloudWatch log path và alarms đã có trong Terraform; Prometheus, Grafana và OpenTelemetry Collector là stack in-cluster được triển khai qua Helm trong module `observability`. Alertmanager không được bật ở pha hiện tại.
+- CloudWatch log path đã có trong Terraform; Prometheus, Grafana và OpenTelemetry Collector là stack in-cluster được triển khai qua Helm trong module `observability`. Alertmanager không được bật ở pha hiện tại.
 - CloudWatch audit log path hoạt động.
 - Executor hoặc webhook receiver trả health check thành công.
 - Nếu AI endpoint sẵn sàng, đường gọi private endpoint và auth flow phải được verify.
@@ -545,7 +545,7 @@ Bảng stack đề xuất:
 | Component | Tool |
 |---|---|
 | Metrics | Prometheus + kube-state-metrics + node-exporter |
-| Alerts | CloudWatch Alarms |
+| Alerts | PrometheusRule + Grafana/Prometheus |
 | Logs | CloudWatch Logs |
 | Dashboards | Grafana |
 | Traces | OpenTelemetry -> AWS X-Ray hoặc Jaeger |

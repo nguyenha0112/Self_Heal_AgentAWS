@@ -1,0 +1,32 @@
+{
+  "correlation_id": "11111111-1111-4111-8111-111111111111",
+  "idempotency_key": "21111111-1111-4111-8111-111111111111",
+  "dry_run_mode": false,
+  "telemetry_window": [
+    {
+      "ts": "2026-06-30T14:00:00.000Z",
+      "tenant_id": "6c8b4b2b-4d45-4209-a1b4-4b532d56a31c",
+      "service": "checkout-svc",
+      "signal_name": "pod_oom_event",
+      "value": "OOMKilled",
+      "labels": {
+        "system": "K8S_NATIVE",
+        "namespace": "tenant-a",
+        "deployment": "cdo-sample-api"
+      }
+    },
+    {
+      "ts": "2026-06-30T14:00:10.000Z",
+      "tenant_id": "6c8b4b2b-4d45-4209-a1b4-4b532d56a31c",
+      "service": "checkout-svc",
+      "signal_name": "container_resource_usage",
+      "value": 96.4,
+      "labels": {
+        "system": "K8S_NATIVE",
+        "namespace": "tenant-a",
+        "deployment": "cdo-sample-api",
+        "resource": "memory_pct"
+      }
+    }
+  ]
+}

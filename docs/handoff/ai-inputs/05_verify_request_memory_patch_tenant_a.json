@@ -1,0 +1,38 @@
+{
+  "correlation_id": "15555555-5555-4555-8555-555555555555",
+  "idempotency_key": "25555555-5555-4555-8555-555555555555",
+  "dry_run_mode": false,
+  "action_executed": {
+    "action": "PATCH_MEMORY_LIMIT",
+    "target": "deployment/cdo-sample-api",
+    "status": "COMPLETED",
+    "execution_time_seconds": 18
+  },
+  "post_telemetry_window": [
+    {
+      "ts": "2026-06-30T14:10:00.000Z",
+      "tenant_id": "6c8b4b2b-4d45-4209-a1b4-4b532d56a31c",
+      "service": "checkout-svc",
+      "signal_name": "container_resource_usage",
+      "value": 63.2,
+      "labels": {
+        "system": "K8S_NATIVE",
+        "namespace": "tenant-a",
+        "deployment": "cdo-sample-api",
+        "resource": "memory_pct"
+      }
+    },
+    {
+      "ts": "2026-06-30T14:10:08.000Z",
+      "tenant_id": "6c8b4b2b-4d45-4209-a1b4-4b532d56a31c",
+      "service": "checkout-svc",
+      "signal_name": "service_unhealthy",
+      "value": "false",
+      "labels": {
+        "system": "K8S_NATIVE",
+        "namespace": "tenant-a",
+        "deployment": "cdo-sample-api"
+      }
+    }
+  ]
+}

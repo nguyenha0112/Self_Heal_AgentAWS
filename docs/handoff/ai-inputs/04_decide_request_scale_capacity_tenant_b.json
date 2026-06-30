@@ -1,0 +1,14 @@
+{
+  "correlation_id": "14444444-4444-4444-8444-444444444444",
+  "idempotency_key": "24444444-4444-4444-8444-444444444444",
+  "dry_run_mode": false,
+  "anomaly_context": {
+    "target_service": "notification-svc",
+    "suspected_fault_type": "QUEUE_BACKLOG",
+    "system": "K8S_NATIVE",
+    "namespace": "tenant-b",
+    "deployment": "notification-service",
+    "trigger_metric": "queue_backlog",
+    "trigger_value": 15000
+  }
+}
