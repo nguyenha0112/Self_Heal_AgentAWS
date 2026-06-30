@@ -9,3 +9,8 @@ ai-team-repo/
 # Python bytecode
 __pycache__/
 *.pyc
+
+# Local/private notes
+PERSONAL_*.md
+LOCAL_*.md
+*.private.md

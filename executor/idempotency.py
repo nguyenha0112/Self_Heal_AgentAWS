@@ -24,7 +24,7 @@ class IdempotencyLock:
         self.cfg = cfg
         self._mem: set[str] = set()  # fallback dev
         self._table = None
-        if _HAS_BOTO and cfg.audit_bucket:  # dùng audit_bucket như cờ "đang chạy AWS thật"
+        if _HAS_BOTO and cfg.idempotency_table:
             self._table = boto3.resource("dynamodb", region_name=cfg.aws_region).Table(
                 cfg.idempotency_table
             )
