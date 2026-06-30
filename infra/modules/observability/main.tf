@@ -122,6 +122,12 @@ resource "helm_release" "otel_collector" {
 
   values = [yamlencode({
     mode = "deployment"
+    image = {
+      repository = "ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-k8s"
+    }
+    command = {
+      name = "otelcol-k8s"
+    }
     config = {
       receivers = {
         otlp = {
@@ -135,7 +141,7 @@ resource "helm_release" "otel_collector" {
         batch = {}
       }
       exporters = {
-        logging = {
+        debug = {
           verbosity = "normal"
         }
       }
@@ -144,17 +150,17 @@ resource "helm_release" "otel_collector" {
           traces = {
             receivers  = ["otlp"]
             processors = ["batch"]
-            exporters  = ["logging"]
+            exporters  = ["debug"]
           }
           metrics = {
             receivers  = ["otlp"]
             processors = ["batch"]
-            exporters  = ["logging"]
+            exporters  = ["debug"]
           }
           logs = {
             receivers  = ["otlp"]
             processors = ["batch"]
-            exporters  = ["logging"]
+            exporters  = ["debug"]
           }
         }
       }

@@ -17,7 +17,7 @@ spec:
       containers:
         - name: executor
           image: REPLACE_WITH_ECR_URL:latest
-          command: ["python", "run_scenarios.py"]
+          command: ["python", "main.py", "--watch"]
           env:
             - name: AI_BASE_URL
               value: "http://ai-engine.self-heal-system.svc.cluster.local:8080"
@@ -31,6 +31,10 @@ spec:
               value: "cdo-idempotency-dev"
             - name: CDO_TENANT_NAMESPACES
               value: "tenant-a,tenant-b"
+            - name: CDO_POLL_INTERVAL_S
+              value: "15"
+            - name: CDO_VERIFY_MAX_WAIT_S
+              value: "5"
           resources:
             requests:
               cpu: "100m"
