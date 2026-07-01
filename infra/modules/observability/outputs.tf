@@ -18,3 +18,7 @@ output "alertmanager_enabled" {
 output "otel_collector_enabled" {
   value = var.enable_otel_collector
 }
+
+output "grafana_admin_secret_name" {
+  value = var.enable_prometheus_stack && var.enable_grafana ? "grafana-admin-credentials" : null
+}

@@ -3,6 +3,12 @@ resource "aws_cloudwatch_log_group" "executor" {
   retention_in_days = 7
 }
 
+locals {
+  monitoring_namespace = "monitoring"
+  grafana_secret_name  = "grafana-admin-credentials"
+  monitoring_enabled   = var.enable_prometheus_stack || var.enable_otel_collector
+}
+
 resource "aws_cloudwatch_log_group" "self_heal_audit" {
   name              = "/cdo/${var.environment}/audit"
   retention_in_days = 7
@@ -20,18 +26,54 @@ resource "aws_cloudwatch_log_group" "kyverno" {
   retention_in_days = 7
 }
 
+resource "kubernetes_namespace_v1" "monitoring" {
+  count = local.monitoring_enabled ? 1 : 0
+
+  metadata {
+    name = local.monitoring_namespace
+  }
+}
+
+resource "random_password" "grafana_admin" {
+  count   = var.enable_prometheus_stack && var.enable_grafana ? 1 : 0
+  length  = 24
+  special = true
+}
+
+resource "kubernetes_secret_v1" "grafana_admin" {
+  count = var.enable_prometheus_stack && var.enable_grafana ? 1 : 0
+
+  metadata {
+    name      = local.grafana_secret_name
+    namespace = local.monitoring_namespace
+  }
+
+  type = "Opaque"
+
+  data = {
+    admin-user     = var.grafana_admin_username
+    admin-credential = random_password.grafana_admin[0].result
+  }
+
+  depends_on = [kubernetes_namespace_v1.monitoring]
+}
+
 resource "helm_release" "kube_prometheus_stack" {
   count            = var.enable_prometheus_stack ? 1 : 0
   name             = "kube-prometheus-stack"
   repository       = "https://prometheus-community.github.io/helm-charts"
   chart            = "kube-prometheus-stack"
-  namespace        = "monitoring"
-  create_namespace = true
+  namespace        = local.monitoring_namespace
+  create_namespace = false
 
   values = [yamlencode({
     grafana = {
-      enabled                   = var.enable_grafana
-      adminPassword             = "admin123!"
+      enabled = var.enable_grafana
+      admin = {
+        existingSecret = local.grafana_secret_name
+        userKey        = "admin-user"
+        passwordKey    = "admin-credential"
+      }
       defaultDashboardsTimezone = "browser"
       sidecar = {
         dashboards = {
@@ -58,6 +100,8 @@ resource "helm_release" "kube_prometheus_stack" {
       enabled = true
     }
   })]
+
+  depends_on = [kubernetes_secret_v1.grafana_admin]
 }
 
 resource "helm_release" "otel_collector" {
@@ -65,8 +109,8 @@ resource "helm_release" "otel_collector" {
   name             = "opentelemetry-collector"
   repository       = "https://open-telemetry.github.io/opentelemetry-helm-charts"
   chart            = "opentelemetry-collector"
-  namespace        = "monitoring"
-  create_namespace = true
+  namespace        = local.monitoring_namespace
+  create_namespace = false
 
   values = [yamlencode({
     mode = "deployment"
@@ -134,4 +178,6 @@ resource "helm_release" "otel_collector" {
       }
     }
   })]
+
+  depends_on = [kubernetes_namespace_v1.monitoring]
 }
