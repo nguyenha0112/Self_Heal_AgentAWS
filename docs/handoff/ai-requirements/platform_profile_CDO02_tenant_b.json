@@ -1,0 +1,127 @@
+{
+  "profile_name": "cdo-02-self-heal-tenant-b",
+  "system": "K8S_NATIVE",
+  "default_namespace": "tenant-b",
+  "default_deployment_template": "deployment/notification-service",
+  "default_service": "notification-svc",
+  "allowed_namespaces": [
+    "tenant-b"
+  ],
+  "services": [
+    "notification-svc"
+  ],
+  "metric_types": [
+    "oom_kill_b",
+    "scale_capacity",
+    "queue_backlog",
+    "crashloop_b",
+    "latency_b",
+    "service_stuck",
+    "default"
+  ],
+  "fault_runbook_mapping": {
+    "oom_kill_b": "OOMPatchMemoryRunbook",
+    "scale_capacity": "CapacityScaleRunbook",
+    "queue_backlog": "CapacityScaleRunbook",
+    "crashloop_b": "ServiceStuckRestartRunbook",
+    "latency_b": "ServiceStuckRestartRunbook",
+    "service_stuck": "ServiceStuckRestartRunbook",
+    "default": "ServiceStuckRestartRunbook"
+  },
+  "dependency_graph": {
+    "notification-svc": []
+  },
+  "runbooks": {
+    "OOMPatchMemoryRunbook": {
+      "name": "OOMPatchMemoryRunbook",
+      "description": "Tenant-b OOM recovery for notification-svc.",
+      "pattern_type": "urgent",
+      "action_plan": [
+        {
+          "step": 1,
+          "action": "PATCH_MEMORY_LIMIT",
+          "target": "deployment/notification-service",
+          "params": {
+            "namespace": "tenant-b",
+            "container": "podinfo",
+            "memory_request_mb": 128,
+            "memory_limit_mb": 256
+          }
+        }
+      ],
+      "blast_radius_config": {
+        "max_pod_impact_pct": 25,
+        "circuit_breaker_error_rate": 0.2,
+        "allowed_namespaces": [
+          "tenant-b"
+        ]
+      },
+      "verify_policy": {
+        "window_seconds": 120,
+        "success_conditions": [
+          "pod_ready == true",
+          "restart_count_no_increase == true"
+        ]
+      }
+    },
+    "CapacityScaleRunbook": {
+      "name": "CapacityScaleRunbook",
+      "description": "Tenant-b deferred scale runbook for notification-svc.",
+      "pattern_type": "deferred",
+      "action_plan": [
+        {
+          "step": 1,
+          "action": "SCALE_REPLICAS",
+          "target": "deployment/notification-service",
+          "params": {
+            "namespace": "tenant-b",
+            "replicas": 4
+          }
+        }
+      ],
+      "blast_radius_config": {
+        "max_pod_impact_pct": 25,
+        "circuit_breaker_error_rate": 0.2,
+        "allowed_namespaces": [
+          "tenant-b"
+        ]
+      },
+      "verify_policy": {
+        "window_seconds": 120,
+        "success_conditions": [
+          "pod_ready == true"
+        ]
+      }
+    },
+    "ServiceStuckRestartRunbook": {
+      "name": "ServiceStuckRestartRunbook",
+      "description": "Tenant-b restart runbook for notification-svc.",
+      "pattern_type": "urgent",
+      "action_plan": [
+        {
+          "step": 1,
+          "action": "RESTART_DEPLOYMENT",
+          "target": "deployment/notification-service",
+          "params": {
+            "namespace": "tenant-b",
+            "grace_period_seconds": 30
+          }
+        }
+      ],
+      "blast_radius_config": {
+        "max_pod_impact_pct": 25,
+        "circuit_breaker_error_rate": 0.2,
+        "allowed_namespaces": [
+          "tenant-b"
+        ]
+      },
+      "verify_policy": {
+        "window_seconds": 120,
+        "success_conditions": [
+          "pod_ready == true",
+          "service_latency_p95 < 500.0"
+        ]
+      }
+    }
+  }
+}

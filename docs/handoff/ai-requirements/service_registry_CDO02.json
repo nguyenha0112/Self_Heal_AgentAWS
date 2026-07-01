@@ -1,0 +1,30 @@
+{
+  "profile_name": "cdo-02-service-registry",
+  "services": [
+    {
+      "service": "checkout-svc",
+      "tenant": "tenant-a",
+      "namespace": "tenant-a",
+      "deployment": "cdo-sample-api",
+      "target": "deployment/cdo-sample-api",
+      "container": "podinfo",
+      "aliases": [
+        "cdo-sample-api",
+        "checkoutservice"
+      ]
+    },
+    {
+      "service": "notification-svc",
+      "tenant": "tenant-b",
+      "namespace": "tenant-b",
+      "deployment": "notification-service",
+      "target": "deployment/notification-service",
+      "container": "podinfo",
+      "aliases": [
+        "notification-service",
+        "orders-svc",
+        "cdo-orders-api"
+      ]
+    }
+  ]
+}
