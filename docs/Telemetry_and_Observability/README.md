@@ -6,8 +6,6 @@ File này giải thích ngắn cấu trúc thư mục `Telemetry_and_Observabili
 
 ```text
 Telemetry_and_Observability/
-  IaC_Observability_v1.0.md
-  Prometheus_v1.0.md
   picture/
   TeamC_Telemetry_customer/
 ```
@@ -16,8 +14,6 @@ Telemetry_and_Observability/
 
 | Thư mục/File | Ý nghĩa |
 |---|---|
-| `IaC_Observability_v1.0.md` | Ghi chú/hướng dẫn phần Infrastructure as Code cho observability |
-| `Prometheus_v1.0.md` | Ghi chú/hướng dẫn phần Prometheus |
 | `picture/` | Hình ảnh, sơ đồ liên quan observability |
 | `TeamC_Telemetry_customer/` | Phần Team C bàn giao cho custom telemetry |
 
