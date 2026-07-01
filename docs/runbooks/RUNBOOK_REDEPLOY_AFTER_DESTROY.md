@@ -106,14 +106,20 @@ kubectl rollout status deploy/ai-engine -n self-heal-system
 ```powershell
 kubectl get pods -n monitoring
 kubectl get servicemonitor -n monitoring
-kubectl get prometheusrule -n monitoring
 kubectl get configmap grafana-dashboard-self-heal -n monitoring -o name
 kubectl port-forward svc/kube-prometheus-stack-grafana -n monitoring 3000:80
 ```
 
 Kỳ vọng:
 
-- Grafana login được bằng `admin / admin123!`
+- Lấy user/password từ secret Kubernetes thay vì dùng credential tĩnh:
+
+```powershell
+kubectl get secret grafana-admin-credentials -n monitoring -o jsonpath="{.data.admin-user}" | % { [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($_)) }
+kubectl get secret grafana-admin-credentials -n monitoring -o jsonpath="{.data.admin-password}" | % { [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($_)) }
+```
+
+- Grafana login được bằng credential đọc từ secret `grafana-admin-credentials`
 - Có dashboard `CDO Self-Heal Overview`
 - Prometheus scrape được `checkout-svc`, `notification-svc`, và `ai-engine` khi AI pod đã lên
 
@@ -141,7 +147,7 @@ Lưu kết quả vào:
 Artifacts nên chụp/lưu:
 
 - `kubectl get pods -A`
-- `kubectl get servicemonitor,prometheusrule -n monitoring`
+- `kubectl get servicemonitor -n monitoring`
 - screenshot Grafana dashboard
 - `aws s3 ls s3://<audit-bucket>/audit/<tenant-id>/`
 - một sample audit JSON theo `correlation_id`

@@ -72,7 +72,7 @@ kubectl apply -f k8s/01-rbac.yaml          # SA tf3-cdo-controller + Role tenant
 kubectl apply -f k8s/04-workloads.yaml     # podinfo tenant-a/b (workload mẫu)
 kubectl apply -f manifests/kyverno/policies/         # 3 ClusterPolicy (replicas 1..10, memory<=4Gi, ns allowlist)
 kubectl apply -f manifests/networkpolicies/          # ingress/egress ai-engine
-kubectl apply -f manifests/monitoring/               # ServiceMonitor + PrometheusRule + Grafana dashboard
+kubectl apply -f manifests/monitoring/               # ServiceMonitor + Grafana dashboard
 kubectl apply -f k8s/02-mock-ai.yaml       # mock AI (tới khi AI team giao image thật)
 kubectl apply -f k8s/03-executor.yaml      # executor
 ```
@@ -82,14 +82,18 @@ kubectl apply -f k8s/03-executor.yaml      # executor
 kubectl get pods -n kyverno -n argocd                       # Running
 kubectl get pods -n self-heal-system -n tenant-a -n tenant-b
 kubectl get pods -n monitoring
-kubectl get servicemonitor,prometheusrule -n monitoring
+kubectl get servicemonitor -n monitoring
 ```
 
 Grafana:
 ```bash
 kubectl port-forward svc/kube-prometheus-stack-grafana -n monitoring 3000:80
 ```
-- Login mặc định: `admin / admin123!`
+- Đọc credential từ secret đã được Terraform tạo:
+```powershell
+kubectl get secret grafana-admin-credentials -n monitoring -o jsonpath="{.data.admin-user}" | % { [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($_)) }
+kubectl get secret grafana-admin-credentials -n monitoring -o jsonpath="{.data.admin-password}" | % { [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($_)) }
+```
 - Dashboard đã provision sẵn: `CDO Self-Heal Overview`
 
 ---

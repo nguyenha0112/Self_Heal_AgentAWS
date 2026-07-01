@@ -4,7 +4,6 @@
 
 - `kubectl get pods -n monitoring`
 - `kubectl get servicemonitor -n monitoring`
-- `kubectl get prometheusrule -n monitoring`
 - `kubectl get configmap grafana-dashboard-self-heal -n monitoring -o yaml`
 - screenshot dashboard `CDO Self-Heal Overview`
 - screenshot alert firing hoặc panel restart/availability đổi trạng thái khi inject lỗi
@@ -17,5 +16,5 @@
 - Grafana có dashboard `CDO Self-Heal Overview`
 - Prometheus scrape được metrics của tenant workloads
 - AI engine có thể scrape `/metrics` ngay khi image thật được deploy
-- Rule cảnh báo phát hiện được unavailable replicas, restart spike, OOMKilled
+- Dashboard và truy vấn Prometheus thể hiện được unavailable replicas, restart spike, OOMKilled
 - Audit evidence khớp với sự kiện quan sát được trên dashboard
