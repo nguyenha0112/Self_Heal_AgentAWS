@@ -1,0 +1,193 @@
+# =============================================================================
+# PrometheusRule — Self-Heal Service Signals (CDO-02)
+# =============================================================================
+# Alert 3 signal Application/Service theo telemetry-contract §3 + §5:
+#   - service_error_rate          (A1) — % 5xx/gRPC non-zero
+#   -service_latency_p95          (A2) — p95 latency ms
+#   -service_throughput_rps       (A3) — RPS để detect traffic drop
+#
+# Forwarder:
+#   Prometheus → Alertmanager → webhook sink → Executor.handle_incident()
+#   (Hiện tại Alertmanager đã DISABLED trong infra/modules/observability/main.tf —
+#   Phase này dùng Pod Status Watcher (watcher.py) làm primary detector.
+#   Apply rule này khi Prometheus + Alertmanager được enable.)
+#
+# Bằng chứng:
+#   - telemetry-contract.md §4 mô tả signal này scrape từ "Ingestion
+#     Prometheus / OTel" với frequency "Cửa sổ trượt 1 phút".
+#   - deployment-contract.md §6.B yêu cầu abort criteria per-endpoint
+#     (p99 > 800ms cho detect, p99 > 3000ms cho decide) → Prometheus cần
+#     query latency để monitor SLA AI Engine.
+# =============================================================================
+
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: cdo-selfheal-service-signals
+  namespace: monitoring
+  labels:
+    app: cdo-selfheal
+    role: alert-rules
+    prometheus: kube-prometheus-stack
+spec:
+  groups:
+  # -----------------------------------------------------------------------
+  # Group 1: Service-level signals — fire khi tỷ lệ lỗi / latency vượt ngưỡng
+  # -----------------------------------------------------------------------
+  - name: cdo.service.alerts
+    interval: 30s
+    rules:
+
+    # ----- service_error_rate > 5% trong 5 phút -----
+    - alert: CDOServiceErrorRateHigh
+      expr: |
+        sum by (namespace, deployment) (
+          rate(
+            http_requests_total{job=~".+",code=~"5.."}
+            [5m]
+          )
+        )
+        /
+        sum by (namespace, deployment) (
+          rate(http_requests_total{job=~".+"}[5m])
+        )
+        > 0.05
+      for: 5m
+      labels:
+        severity: high
+        signal_name: service_error_rate
+        layer: application
+      annotations:
+        summary: "Service error rate > 5% trên {{ $labels.namespace }}/{{ $labels.deployment }}"
+        description: |
+          Error rate = {{ $value | humanizePercentage }} (> 5% threshold).
+          Telemetry-contract §5 yêu cầu signal này được scrape mỗi 1 phút.
+          Watcher/CDO sẽ enrich telemetry_window với signal này khi detect.
+        runbook_url: "https://wiki.internal/runbooks/service-error-rate"
+
+    # ----- service_latency_p95 > 2s trong 5 phút -----
+    - alert: CDOServiceLatencyHigh
+      expr: |
+        histogram_quantile(
+          0.95,
+          sum by (namespace, deployment, le) (
+            rate(http_request_duration_seconds_bucket{job=~".+"}[5m])
+          )
+        ) > 2.0
+      for: 5m
+      labels:
+        severity: high
+        signal_name: service_latency_p95
+        layer: application
+      annotations:
+        summary: "Service p95 latency > 2s trên {{ $labels.namespace }}/{{ $labels.deployment }}"
+        description: |
+          p95 latency = {{ $value }}s. AI Engine ngưỡng p99 abort: 800ms (detect),
+          3000ms (decide). Latency > 2s là degraded.
+        runbook_url: "https://wiki.internal/runbooks/service-latency"
+
+    # ----- service_throughput_rps giảm đột ngột > 80% (sập traffic) -----
+    - alert: CDOServiceThroughputDrop
+      expr: |
+        (
+          sum by (namespace, deployment) (rate(http_requests_total[1m]))
+          /
+          sum by (namespace, deployment) (rate(http_requests_total[1h] offset 1h))
+        ) < 0.2
+      for: 5m
+      labels:
+        severity: high
+        signal_name: service_throughput_rps
+        layer: application
+      annotations:
+        summary: "Service throughput giảm > 80% trên {{ $labels.namespace }}/{{ $labels.deployment }}"
+        description: |
+          Throughput hiện tại chỉ bằng {{ $value | humanizePercentage }} của
+          baseline 1h trước. Có thể do service stuck/dead — CDO sẽ check
+          service_unhealthy + container_restart_count.
+
+  # -----------------------------------------------------------------------
+  # Group 2: AI Engine SLA monitoring (deployment-contract §6.B abort criteria)
+  # -----------------------------------------------------------------------
+  - name: cdo.aiengine.sla
+    interval: 30s
+    rules:
+
+    # ----- /v1/detect p99 > 800ms (abort threshold) -----
+    - alert: CDOAIDetectLatencyHigh
+      expr: |
+        histogram_quantile(
+          0.99,
+          sum by (le) (
+            rate(http_request_duration_seconds_bucket{
+              job="ai-engine",path="/v1/detect"
+            }[5m])
+          )
+        ) > 0.8
+      for: 5m
+      labels:
+        severity: high
+        endpoint: detect
+      annotations:
+        summary: "AI /v1/detect p99 > 800ms (abort threshold)"
+        description: |
+          p99 = {{ $value }}s. Theo deployment-contract §6.B, khi > 800ms trong
+          5 phút → trigger rollback AI Engine.
+
+    # ----- /v1/decide p99 > 3000ms (LLM call threshold) -----
+    - alert: CIDOIDecideLatencyHigh
+      expr: |
+        histogram_quantile(
+          0.99,
+          sum by (le) (
+            rate(http_request_duration_seconds_bucket{
+              job="ai-engine",path="/v1/decide"
+            }[5m])
+          )
+        ) > 3.0
+      for: 5m
+      labels:
+        severity: high
+        endpoint: decide
+      annotations:
+        summary: "AI /v1/decide p99 > 3000ms (LLM call threshold)"
+        description: |
+          p99 = {{ $value }}s. Bedrock timeout hoặc rate-limited.
+          AI sẽ fallback rule-based nếu cost_cap_exceeded.
+
+    # ----- /v1/verify p99 > 1000ms -----
+    - alert: CIDOVerifyLatencyHigh
+      expr: |
+        histogram_quantile(
+          0.99,
+          sum by (le) (
+            rate(http_request_duration_seconds_bucket{
+              job="ai-engine",path="/v1/verify"
+            }[5m])
+          )
+        ) > 1.0
+      for: 5m
+      labels:
+        severity: high
+        endpoint: verify
+      annotations:
+        summary: "AI /v1/verify p99 > 1000ms (abort threshold)"
+        description: |
+          p99 = {{ $value }}s. Theo deployment-contract §6.B.
+
+    # ----- AI Engine 5xx > 1% trong 5 phút -----
+    - alert: CDOAIErrorRateHigh
+      expr: |
+        sum(rate(http_requests_total{job="ai-engine",code=~"5.."}[5m]))
+        /
+        sum(rate(http_requests_total{job="ai-engine"}[5m]))
+        > 0.01
+      for: 5m
+      labels:
+        severity: critical
+      annotations:
+        summary: "AI Engine 5xx > 1% — trigger rollback theo §6.B"
+        description: |
+          5xx error rate = {{ $value | humanizePercentage }}.
+          Abort criteria deployment-contract §6.B đã vi phạm.

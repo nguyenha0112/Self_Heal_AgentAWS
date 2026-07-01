@@ -35,6 +35,7 @@ class K8sClient:
             k8s_config.load_kube_config()
         self.apps = client.AppsV1Api()
         self.core = client.CoreV1Api()
+        self.custom = client.CustomObjectsApi()
 
     # ---------- đọc state cho snapshot ----------
 
@@ -161,6 +162,39 @@ class K8sClient:
             return None
         return self.core.list_namespaced_pod(namespace)
 
+    def get_pod_metrics(self, namespace: str, deployment: str) -> list[tuple[str, str, int]]:
+        """
+        Scrape container memory working_set bytes từ metrics.k8s.io API.
+
+        Trả list các tuple (pod_name, container_name, memory_bytes) cho
+        TẤT CẢ pod thuộc deployment. Dùng bởi K8sMetricsCollector.
+
+        Lỗi / metrics-server chưa deploy → trả []. Caller fallback mock.
+        """
+        if not self.enabled:
+            return []
+        try:
+            metrics = self.custom.list_namespaced_pod_metrics(namespace)
+        except ApiException:
+            return []
+        out: list[tuple[str, str, int]] = []
+        for pod in metrics.items:
+            # Filter theo owner ref (ReplicaSet → deployment)
+            matched = False
+            for ref in (pod.metadata.owner_references or []):
+                if ref.kind == "ReplicaSet" and ref.name.startswith(deployment):
+                    matched = True
+                    break
+            if not matched:
+                continue
+            for c in (pod.containers or []):
+                mem = (c.usage or {}).get("memory")
+                if not mem:
+                    continue
+                # "1073741824" / "1Gi" / "512Mi" → bytes int
+                out.append((pod.metadata.name, c.name, _parse_k8s_memory(mem)))
+        return out
+
     def get_recent_pod_logs(self, namespace: str, deployment: str,
                             tail_lines: int = 20) -> list[str]:
         """
@@ -187,3 +221,21 @@ class K8sClient:
     def _stub(self, action: str, ns: str, name: str, dry_run: bool, **extra) -> dict:
         return {"action": action, "namespace": ns, "name": name,
                 "dry_run": dry_run, "status": "MOCK_OK" if not self.enabled else "OK", **extra}
+
+
+def _parse_k8s_memory(raw: str) -> int:
+    """
+    Parse Kubernetes memory format ("1Gi", "512Mi", "1073741824") → bytes int.
+
+    ResourceQuantity format: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+    Hỗ trợ: Ki/Mi/Gi (binary), K/M/G (decimal), hoặc số thuần bytes.
+    """
+    s = raw.strip()
+    suffixes = {
+        "Ki": 1024, "Mi": 1024 ** 2, "Gi": 1024 ** 3, "Ti": 1024 ** 4,
+        "K": 1000, "M": 1000 ** 2, "G": 1000 ** 3, "T": 1000 ** 4,
+    }
+    for suf, mul in suffixes.items():
+        if s.endswith(suf):
+            return int(float(s[:-len(suf)]) * mul)
+    return int(s)

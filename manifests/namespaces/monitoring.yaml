@@ -1,0 +1,12 @@
+# Namespace cho Prometheus monitoring stack.
+# Tạo trước khi apply PrometheusRule để CRD monitoring.coreos.com resolve được.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: monitoring
+  labels:
+    name: monitoring
+    purpose: observability
+  # NetworkPolicy: chỉ allow ingress từ tenant-a/b/self-heal-system (CDO
+  # executor scrape Prometheus) và Grafana (visualization).
+  # Egress: allow HTTPS ra AWS VPC Endpoints (Prometheus pushgateway optional).

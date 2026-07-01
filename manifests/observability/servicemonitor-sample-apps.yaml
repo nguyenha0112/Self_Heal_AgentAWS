@@ -1,0 +1,73 @@
+# =============================================================================
+# ServiceMonitor — Sample app (podinfo) cho CDO-02 sandbox
+# =============================================================================
+# Mục đích:
+#   Cho Prometheus scrape `/metrics` từ pod `cdo-sample-api` (tenant-a) và
+#   `notification-service` (tenant-b). ServiceMonitor sẽ tạo Kubernetes
+#   ServiceMonitor resource, kube-prometheus-stack Prometheus tự động pick
+#   scrape target theo selector.
+#
+# Selector yêu cầu kube-prometheus-stack default:
+#   serviceMonitorSelectorNilUsesHelmValues = false
+#   → ServiceMonitor PHẢI có label `release: kube-prometheus-stack`
+#   (file infra/modules/observability/main.tf:109 đã set value này).
+#
+# Bằng chứng trong code:
+#   - `prometheus-rule-service-signals.yaml:42-55` đang query
+#     `http_requests_total{job=~".+",code=~"5.."}`. Podinfo expose metric
+#     `http_requests_total` (counter) với labels `code`, `method`, `path`.
+#     → Sau khi áp ServiceMonitor này, PromQL trong rule sẽ return data.
+#   - `collectors/prometheus_collector.py:75-90` cũng đang query `istio_*`
+#     (sai cho podinfo — không dùng Istio). Sửa sang `http_requests_total`
+#     để khớp podinfo schema.
+#
+# Apply:
+#   kubectl apply -f manifests/observability/servicemonitor-sample-apps.yaml
+# Validate:
+#   kubectl get servicemonitor -n monitoring cdo-sample-apps
+#   kubectl port-forward -n monitoring svc/kube-prometheus-stack-prometheus 9090:9090
+#   curl http://127.0.0.1:9090/api/v1/targets | jq '.data.activeTargets[]
+#     | select(.labels.job | test("cdo-sample"))'
+# =============================================================================
+
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: cdo-sample-apps
+  namespace: monitoring
+  labels:
+    # Bắt buộc — match selector mặc định của kube-prometheus-stack
+    # (vì `serviceMonitorSelectorNilUsesHelmValues = false` ở main.tf:109).
+    release: kube-prometheus-stack
+    app: cdo-sample
+    role: app-metrics
+spec:
+  # Selector theo `app` — match Service `cdo-sample-api` (tenant-a) và
+  # `notification-service` (tenant-b) vì cả 2 đều có label `app`.
+  #
+  # Lưu ý: `app` là K8s recommended label, Service trong
+  # tenant-a-sample-app.yaml:62 chưa có. Đã được thêm (xem note bên dưới).
+  selector:
+    matchLabels:
+      tier: cdo-sample
+  namespaceSelector:
+    matchNames:
+      - tenant-a
+      - tenant-b
+  endpoints:
+    - port: metrics        # port name "metrics" trong Service (port 9797)
+      path: /metrics       # podinfo expose Prometheus format tại đây
+      interval: 30s        # scrape mỗi 30s — khớp AI detect latency budget
+      honorLabels: false   # giữ label từ podinfo, KHÔNG bị Prometheus override
+      scrapeTimeout: 10s
+      # Relabel để thêm label `deployment` cho PromQL select.
+      # Source: podinfo metric `http_requests_total` KHÔNG có label deployment.
+      # Sau relabel rule này, PromQL có thể filter theo deployment.
+      relabelings:
+        - sourceLabels: [__meta_kubernetes_service_label_app]
+          targetLabel: deployment
+        - sourceLabels: [__meta_kubernetes_namespace]
+          targetLabel: namespace
+        - sourceLabels: [__meta_kubernetes_service_name]
+          targetLabel: service

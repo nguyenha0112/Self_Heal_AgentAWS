@@ -32,6 +32,7 @@ from k8s_client import K8sClient
 from models import DetectResponse
 from pre_decide_gate import FlapTracker, evaluate
 from safety_gate import check as safety_check
+from signal_registry import SignalRegistry, default_registry
 from telemetry_adapter import TelemetryAdapter
 from telemetry_forwarder import TelemetryForwarder
 
@@ -46,21 +47,43 @@ class Executor:
         self.flap = FlapTracker()
         self.breaker = CircuitBreaker(cfg)
         self.k8s = K8sClient(in_cluster=False)
+        # SignalRegistry: quyết định scrape signal nào khi có fault type.
+        # Mặc định dùng 4 collector (K8s Metrics + Prometheus + Logs + External)
+        # để cover đủ 12 signal của telemetry-contract.
+        self.signals: SignalRegistry = default_registry(self.k8s, cfg)
 
     def handle_incident(self, telemetry_window: list[dict],
                         tenant_namespace: str,
-                        correlation_id: str | None = None) -> str:
+                        correlation_id: str | None = None,
+                        fault_type: str | None = None) -> str:
         """
         Xử lý 1 incident end-to-end. Trả về terminal state (machine-readable).
         tenant_namespace = namespace của incident (CDO biết từ alert source).
+
+        `fault_type` (optional): nếu caller biết fault là gì (vd từ K8s
+        waiting_reason hoặc Alertmanager label), SignalRegistry sẽ scrape
+        đúng các signal LIÊN QUAN nhất theo FAULT_TO_SIGNALS. Nếu None →
+        scrape full context (đắt hơn nhưng safe).
         """
         correlation_id = correlation_id or new_uuid()
         log = A.AuditLogger(correlation_id, self.cfg.tenant_id, self.cfg)
-        log.event(A.ALERT_RECEIVED, namespace=tenant_namespace)
+        log.event(A.ALERT_RECEIVED, namespace=tenant_namespace,
+                  fault_type=fault_type)
         ctx = E.IncidentContext(correlation_id=correlation_id, tenant_id=self.cfg.tenant_id,
                                 namespace=tenant_namespace, telemetry_window=telemetry_window)
 
         try:
+            # --- [0.5] SIGNAL ENRICHMENT (mới) ---
+            # Nếu caller biết fault_type → registry scrape thêm signal liên quan.
+            # Nếu không → giữ nguyên window từ watcher.
+            if fault_type:
+                enriched = self._enrich_with_signals(
+                    telemetry_window, fault_type, tenant_namespace)
+                if enriched:
+                    log.event("signals_enriched", fault_type=fault_type,
+                              added_points=len(enriched) - len(telemetry_window))
+                    telemetry_window = enriched
+
             normalized_window = self.adapter.build_window(telemetry_window)
             log.event("telemetry_normalized", point_count=len(normalized_window))
             self.forwarder.enqueue_detect_request(normalized_window, correlation_id)
@@ -231,11 +254,69 @@ class Executor:
         fresh = W.scrape_deployment_telemetry(self.k8s, first.namespace, deployment, self.cfg)
         return fresh or telemetry_window
 
+    def _enrich_with_signals(self, telemetry_window: list[dict],
+                              fault_type: str,
+                              tenant_namespace: str) -> list[dict]:
+        """
+        Bổ sung telemetry points từ SignalRegistry cho fault_type tương ứng.
+
+        Logic:
+          1. registry.resolve(fault_type) → danh sách signal cần scrape
+          2. Với mỗi signal, scrape qua CollectorRegistry.collect_for_signal()
+          3. Merge với telemetry_window hiện có (dedupe theo signal_name +
+             deployment trong cùng window — tránh duplicate khi watcher đã
+             có sẵn signal đó).
+
+        Bằng chứng pattern: ai_client.py:detect() đã nhận `telemetry_window`
+        là list các point — thêm point mới vào list là đủ, không cần đổi schema.
+
+        Trả về window đã merge. Trả [] nếu registry không có data → caller
+        fallback dùng window gốc.
+        """
+        # Suy ra deployment từ window đầu tiên (watcher đã có)
+        first = telemetry_window[0] if telemetry_window else {}
+        labels = first.get("labels", {}) if isinstance(first, dict) else {}
+        deployment = labels.get("deployment", "")
+        ns = labels.get("namespace", tenant_namespace)
+        if not deployment:
+            log_extra = {"fault_type": fault_type, "reason": "no_deployment_in_window"}
+            return telemetry_window
+
+        # Scrape các signal liên quan fault
+        req = self.signals.resolve(fault_type)
+        extra_points: list[dict] = []
+        for sig in req.signals:
+            extra_points.extend(self.signals.collect_for_signal(
+                signal_name=sig,
+                tenant_id=self.cfg.tenant_id,
+                namespace=ns,
+                deployment=deployment,
+                tenant_namespace=tenant_namespace,
+            ))
+
+        # Dedupe: nếu window gốc đã có signal X cho deployment D → giữ nguyên
+        # (watcher thường có data mới nhất). Chỉ thêm signal mới từ collector.
+        existing_keys = {
+            (p.get("signal_name"), p.get("labels", {}).get("deployment"))
+            for p in telemetry_window
+            if isinstance(p, dict)
+        }
+        new_points = [
+            p for p in extra_points
+            if (p.get("signal_name"), p.get("labels", {}).get("deployment"))
+            not in existing_keys
+        ]
+        return list(telemetry_window) + new_points
+
 
 def watch_loop(cfg=CONFIG) -> None:
     """
     Production mode: poll pod status mỗi CDO_POLL_INTERVAL_S giây → trigger heal loop.
     Cooldown CDO_HEAL_COOLDOWN_S (default 5 phút) tránh trigger lại cùng deployment liên tục.
+
+    Mỗi FaultEvent có `suspected_fault_type` (xem watcher.py:_WAITING_REASON_MAP).
+    Executor.handle_incincident() sẽ dùng fault_type để SignalRegistry scrape
+    thêm các signal liên quan (vd OOM_KILL → thêm container_resource_usage).
 
     Chạy: python main.py --watch
     """
@@ -252,7 +333,11 @@ def watch_loop(cfg=CONFIG) -> None:
                 print(f"[watcher] {key} trong cooldown, bỏ qua")
                 continue
             print(f"[watcher] phát hiện {ev.suspected_fault_type} tại {key}")
-            outcome = executor.handle_incident(ev.telemetry_window, ev.namespace)
+            outcome = executor.handle_incident(
+                ev.telemetry_window,
+                ev.namespace,
+                fault_type=ev.suspected_fault_type,
+            )
             print(f"[watcher] {key} → {outcome}")
             cooldown[key] = time.monotonic()
         time.sleep(cfg.poll_interval_s)

@@ -60,6 +60,7 @@ metadata:
   namespace: tenant-b
   labels:
     app: notification-service
+    tier: cdo-sample                # match ServiceMonitor selector
     tenant_id: tenant-b
 spec:
   selector:

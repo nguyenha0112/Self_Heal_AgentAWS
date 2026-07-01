@@ -1,0 +1,28 @@
+{
+  "_comment": "OOM Kill — Watcher phát hiện OOMKilled → registry enrich thêm container_resource_usage + container_restart_count. AI có đủ context chẩn đoán memory pressure.",
+  "_comment_registry": "fault_type=OOM_KILL → registry.resolve() scrape 3 signal: pod_oom_event (có sẵn từ watcher), container_resource_usage (K8sMetricsCollector), container_restart_count (watcher có sẵn).",
+  "tenant_namespace": "tenant-a",
+  "fault_type": "OOM_KILL",
+  "correlation_id": "sc-registry-oom-0001",
+  "telemetry_window": [
+    {
+      "ts": "2026-06-30T10:00:00.000Z",
+      "tenant_id": "6c8b4b2b-4d45-4209-a1b4-4b532d56a31c",
+      "service": "checkout-svc",
+      "signal_name": "pod_oom_event",
+      "value": "OOMKilled: Pod checkout-svc-5f8d9b7c-xyz12, Container main, Exit Code 137",
+      "labels": {
+        "system": "K8S_NATIVE",
+        "namespace": "tenant-a",
+        "deployment": "checkout-svc",
+        "pod_name": "checkout-svc-5f8d9b7c-xyz12",
+        "container": "main"
+      }
+    }
+  ],
+  "_expected_enriched_signals": [
+    "pod_oom_event",
+    "container_resource_usage",
+    "container_restart_count"
+  ]
+}

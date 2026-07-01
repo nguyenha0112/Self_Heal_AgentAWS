@@ -1,0 +1,25 @@
+{
+  "_comment": "Cert Expiry — ExternalCollector (Secrets Manager API) scrape secret_expiry_warning. AI match runbook CertRotationRunbook, pattern_type=deferred, action=ROTATE_SECRET.",
+  "_comment_registry": "fault_type=CERT_EXPIRY → registry.resolve() scrape 2 signal: secret_expiry_warning (ExternalCollector), service_unhealthy (K8sWatcher, optional).",
+  "tenant_namespace": "tenant-b",
+  "fault_type": "CERT_EXPIRY",
+  "correlation_id": "sc-registry-cert-0001",
+  "telemetry_window": [
+    {
+      "ts": "2026-06-30T10:00:00.000Z",
+      "tenant_id": "6c8b4b2b-4d45-4209-a1b4-4b532d56a31c",
+      "service": "payment-gateway",
+      "signal_name": "secret_expiry_warning",
+      "value": 7,
+      "labels": {
+        "system": "E-COMMERCE",
+        "namespace": "tenant-b",
+        "deployment": "payment-gateway",
+        "secret_name": "tf-3/payment-gateway/cert"
+      }
+    }
+  ],
+  "_expected_enriched_signals": [
+    "secret_expiry_warning"
+  ]
+}

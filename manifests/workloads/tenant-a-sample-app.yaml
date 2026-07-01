@@ -60,6 +60,7 @@ metadata:
   namespace: tenant-a
   labels:
     app: cdo-sample-api
+    tier: cdo-sample                # match ServiceMonitor selector
     tenant_id: tenant-a
 spec:
   selector:

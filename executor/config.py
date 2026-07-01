@@ -104,5 +104,15 @@ class Config:
     http_500_backoff_s: tuple[float, ...] = (1.0, 3.0)
     http_429_max_retries: int = 3  # trần retry cho 429 → tránh vòng lặp vô hạn
 
+    # --- Signal Collector sources (12 signal coverage) ---
+    prometheus_url: str = _env("PROMETHEUS_URL",
+                                "http://prometheus.monitoring:9090")
+    log_source: str = _env("LOG_SOURCE", "mock")  # cloudwatch | otel | mock
+    cw_log_group: str = _env("CW_LOG_GROUP", "/aws/eks/self-heal/application")
+    otel_logs_endpoint: str = _env("OTEL_LOGS_ENDPOINT",
+                                    "http://otel-collector.monitoring:4318/v1/logs")
+    default_queue_url: str = _env("CDO_DEFAULT_QUEUE_URL", "")
+    cluster_name: str = _env("CDO_CLUSTER_NAME", "cdo-eks-cluster-dev")
+
 
 CONFIG = Config()
