@@ -92,7 +92,7 @@ kubectl port-forward svc/kube-prometheus-stack-grafana -n monitoring 3000:80
 - Đọc credential từ secret đã được Terraform tạo:
 ```powershell
 kubectl get secret grafana-admin-credentials -n monitoring -o jsonpath="{.data.admin-user}" | % { [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($_)) }
-kubectl get secret grafana-admin-credentials -n monitoring -o jsonpath="{.data.admin-password}" | % { [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($_)) }
+kubectl get secret grafana-admin-credentials -n monitoring -o jsonpath="{.data.admin-credential}" | % { [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($_)) }
 ```
 - Dashboard đã provision sẵn: `CDO Self-Heal Overview`
 

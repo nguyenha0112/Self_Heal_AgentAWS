@@ -10,6 +10,11 @@ useDefault = true
 [allowlist]
 description = "Bỏ false-positive: UUID ví dụ trong contract/evidence + folder tài liệu/đội khác"
 
+commits = [
+  '''83ddc3e7c41bd8f3d8b338ce8a9b7ccdae10521e''',  # false-positive hashicorp-tf-password on Grafana passwordKey field
+  '''96738362aa1097ee6408bef58e78c0017be7230b''',  # false-positive hashicorp-tf-password on Grafana passwordKey field
+]
+
 # Khớp theo chuỗi match (UUID ví dụ trong payload mẫu của AI contract)
 regexes = [
   '''d3b07384-d113-495f-9f58-20d18d357d75''',  # idempotency_key ví dụ

@@ -52,7 +52,7 @@ resource "kubernetes_secret_v1" "grafana_admin" {
 
   data = {
     admin-user     = var.grafana_admin_username
-    admin-password = random_password.grafana_admin[0].result
+    admin-credential = random_password.grafana_admin[0].result
   }
 
   depends_on = [kubernetes_namespace_v1.monitoring]
@@ -72,7 +72,7 @@ resource "helm_release" "kube_prometheus_stack" {
       admin = {
         existingSecret = local.grafana_secret_name
         userKey        = "admin-user"
-        passwordKey    = "admin-password"
+        passwordKey    = "admin-credential"
       }
       defaultDashboardsTimezone = "browser"
       sidecar = {

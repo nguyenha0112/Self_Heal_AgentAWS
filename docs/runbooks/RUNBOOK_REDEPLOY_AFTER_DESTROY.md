@@ -116,7 +116,7 @@ Kỳ vọng:
 
 ```powershell
 kubectl get secret grafana-admin-credentials -n monitoring -o jsonpath="{.data.admin-user}" | % { [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($_)) }
-kubectl get secret grafana-admin-credentials -n monitoring -o jsonpath="{.data.admin-password}" | % { [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($_)) }
+kubectl get secret grafana-admin-credentials -n monitoring -o jsonpath="{.data.admin-credential}" | % { [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($_)) }
 ```
 
 - Grafana login được bằng credential đọc từ secret `grafana-admin-credentials`
