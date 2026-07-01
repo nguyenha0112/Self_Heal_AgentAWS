@@ -10,7 +10,6 @@ New-Item -ItemType Directory -Force -Path $OutputDir | Out-Null
 
 kubectl get pods -A | Out-File -FilePath (Join-Path $OutputDir "pods-all.txt") -Encoding utf8
 kubectl get servicemonitor -n monitoring | Out-File -FilePath (Join-Path $OutputDir "servicemonitors.txt") -Encoding utf8
-kubectl get prometheusrule -n monitoring | Out-File -FilePath (Join-Path $OutputDir "prometheusrules.txt") -Encoding utf8
 kubectl get configmap grafana-dashboard-self-heal -n monitoring -o yaml | Out-File -FilePath (Join-Path $OutputDir "grafana-dashboard.yaml") -Encoding utf8
 kubectl logs deploy/cdo-executor -n self-heal-system --tail=200 | Out-File -FilePath (Join-Path $OutputDir "executor-tail.log") -Encoding utf8
 

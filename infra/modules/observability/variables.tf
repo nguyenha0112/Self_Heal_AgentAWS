@@ -22,3 +22,8 @@ variable "enable_otel_collector" {
   type    = bool
   default = true
 }
+
+variable "grafana_admin_username" {
+  type    = string
+  default = "admin"
+}

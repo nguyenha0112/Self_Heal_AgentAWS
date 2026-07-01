@@ -545,7 +545,7 @@ Bảng stack đề xuất:
 | Component | Tool |
 |---|---|
 | Metrics | Prometheus + kube-state-metrics + node-exporter |
-| Alerts | PrometheusRule + Grafana/Prometheus |
+| Alerts | Grafana dashboard + Prometheus queries |
 | Logs | CloudWatch Logs |
 | Dashboards | Grafana |
 | Traces | OpenTelemetry -> AWS X-Ray hoặc Jaeger |
