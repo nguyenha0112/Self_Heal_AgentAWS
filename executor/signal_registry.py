@@ -130,6 +130,28 @@ FAULT_TO_SIGNALS: dict[str, list[str]] = {
 }
 
 
+# CDO internal fault types -> AI Engine platform-profile fault types.
+CDO_TO_AI_FAULT_TYPE: dict[str, str] = {
+    "OOM_KILL": "mem",
+    "MEMORY_PRESSURE": "mem",
+    "CRASH_LOOP": "mem",
+    "BAD_DEPLOY": "cpu",
+    "ERROR_RATE_HIGH": "loss",
+    "LATENCY_SPIKE": "delay",
+    "SERVICE_STUCK": "delay",
+    "QUEUE_BACKLOG": "delay",
+    "DB_POOL_SATURATION": "socket",
+    "CERT_EXPIRY": "cpu",
+    "UNKNOWN": "f1",
+}
+
+
+def to_ai_fault_type(fault_type: str | None) -> str | None:
+    if fault_type is None:
+        return None
+    return CDO_TO_AI_FAULT_TYPE.get(fault_type, fault_type)
+
+
 # ---------------------------------------------------------------------
 # K8s waiting_reason → fault_type (mở rộng của watcher.py)
 # ---------------------------------------------------------------------

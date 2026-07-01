@@ -1,0 +1,276 @@
+{
+  "profile_name": "cdo-self-heal-default",
+  "system": "E-COMMERCE",
+  "default_namespace": "tenant-a",
+  "default_deployment_template": "deployment/{{target_service}}",
+  "default_service": "checkout-svc",
+  "allowed_namespaces": [
+    "tenant-a",
+    "tenant-b",
+    "production",
+    "default"
+  ],
+  "services": [
+    "checkout-svc",
+    "orders-svc",
+    "payment-gateway",
+    "ecommerce-api",
+    "ecommerce-web",
+    "cdo-sample-api",
+    "cdo-orders-api"
+  ],
+  "metric_types": [
+    "cpu",
+    "mem",
+    "delay",
+    "loss",
+    "socket",
+    "disk",
+    "f1",
+    "f2",
+    "f3",
+    "f4",
+    "f5"
+  ],
+  "fault_runbook_mapping": {
+    "cpu": "CPUSaturationRecoveryRunbook",
+    "mem": "MemoryRecoveryRunbook",
+    "delay": "LatencyRecoveryRunbook",
+    "loss": "ErrorRateRecoveryRunbook",
+    "socket": "SocketRecoveryRunbook",
+    "disk": "DiskRecoveryRunbook",
+    "f1": "DefaultRecoveryRunbook",
+    "f2": "DefaultRecoveryRunbook",
+    "f3": "DefaultRecoveryRunbook",
+    "f4": "DefaultRecoveryRunbook",
+    "f5": "DefaultRecoveryRunbook"
+  },
+  "dependency_graph": {
+    "checkout-svc": [
+      "payment-gateway"
+    ],
+    "orders-svc": [
+      "payment-gateway"
+    ],
+    "ecommerce-web": [
+      "ecommerce-api"
+    ]
+  },
+  "runbooks": {
+    "CPUSaturationRecoveryRunbook": {
+      "name": "CPUSaturationRecoveryRunbook",
+      "description": "Scale replicas for CPU saturation.",
+      "pattern_type": "deferred",
+      "action_plan": [
+        {
+          "step": 1,
+          "action": "SCALE_REPLICAS",
+          "target": "deployment/{{target_service}}",
+          "params": {
+            "namespace": "tenant-a",
+            "replicas": 3
+          }
+        }
+      ],
+      "blast_radius_config": {
+        "max_pod_impact_pct": 25,
+        "circuit_breaker_error_rate": 0.2,
+        "allowed_namespaces": [
+          "tenant-a",
+          "tenant-b"
+        ]
+      },
+      "verify_policy": {
+        "window_seconds": 120,
+        "success_conditions": [
+          "pod_ready == true"
+        ]
+      }
+    },
+    "MemoryRecoveryRunbook": {
+      "name": "MemoryRecoveryRunbook",
+      "description": "Patch memory requests and limits for OOM or memory pressure.",
+      "pattern_type": "urgent",
+      "action_plan": [
+        {
+          "step": 1,
+          "action": "PATCH_MEMORY_LIMIT",
+          "target": "deployment/{{target_service}}",
+          "params": {
+            "namespace": "tenant-a",
+            "container": "main",
+            "memory_request_mb": 512,
+            "memory_limit_mb": 1024
+          }
+        }
+      ],
+      "blast_radius_config": {
+        "max_pod_impact_pct": 25,
+        "circuit_breaker_error_rate": 0.2,
+        "allowed_namespaces": [
+          "tenant-a",
+          "tenant-b"
+        ]
+      },
+      "verify_policy": {
+        "window_seconds": 120,
+        "success_conditions": [
+          "pod_ready == true",
+          "restart_count_no_increase == true"
+        ]
+      }
+    },
+    "LatencyRecoveryRunbook": {
+      "name": "LatencyRecoveryRunbook",
+      "description": "Rolling restart for latency or stuck service symptoms.",
+      "pattern_type": "urgent",
+      "action_plan": [
+        {
+          "step": 1,
+          "action": "RESTART_DEPLOYMENT",
+          "target": "deployment/{{target_service}}",
+          "params": {
+            "namespace": "tenant-a",
+            "grace_period_seconds": 30
+          }
+        }
+      ],
+      "blast_radius_config": {
+        "max_pod_impact_pct": 25,
+        "circuit_breaker_error_rate": 0.2,
+        "allowed_namespaces": [
+          "tenant-a",
+          "tenant-b"
+        ]
+      },
+      "verify_policy": {
+        "window_seconds": 120,
+        "success_conditions": [
+          "pod_ready == true",
+          "service_latency_p95 < 200.0"
+        ]
+      }
+    },
+    "ErrorRateRecoveryRunbook": {
+      "name": "ErrorRateRecoveryRunbook",
+      "description": "Rolling restart for high error rate or packet loss symptoms.",
+      "pattern_type": "urgent",
+      "action_plan": [
+        {
+          "step": 1,
+          "action": "RESTART_DEPLOYMENT",
+          "target": "deployment/{{target_service}}",
+          "params": {
+            "namespace": "tenant-a",
+            "grace_period_seconds": 30
+          }
+        }
+      ],
+      "blast_radius_config": {
+        "max_pod_impact_pct": 25,
+        "circuit_breaker_error_rate": 0.2,
+        "allowed_namespaces": [
+          "tenant-a",
+          "tenant-b"
+        ]
+      },
+      "verify_policy": {
+        "window_seconds": 120,
+        "success_conditions": [
+          "pod_ready == true",
+          "service_error_rate < 0.01"
+        ]
+      }
+    },
+    "SocketRecoveryRunbook": {
+      "name": "SocketRecoveryRunbook",
+      "description": "Scale replicas for socket or connection pool saturation.",
+      "pattern_type": "deferred",
+      "action_plan": [
+        {
+          "step": 1,
+          "action": "SCALE_REPLICAS",
+          "target": "deployment/{{target_service}}",
+          "params": {
+            "namespace": "tenant-a",
+            "replicas": 3
+          }
+        }
+      ],
+      "blast_radius_config": {
+        "max_pod_impact_pct": 25,
+        "circuit_breaker_error_rate": 0.2,
+        "allowed_namespaces": [
+          "tenant-a",
+          "tenant-b"
+        ]
+      },
+      "verify_policy": {
+        "window_seconds": 120,
+        "success_conditions": [
+          "pod_ready == true"
+        ]
+      }
+    },
+    "DiskRecoveryRunbook": {
+      "name": "DiskRecoveryRunbook",
+      "description": "Rolling restart fallback for disk I/O symptoms.",
+      "pattern_type": "urgent",
+      "action_plan": [
+        {
+          "step": 1,
+          "action": "RESTART_DEPLOYMENT",
+          "target": "deployment/{{target_service}}",
+          "params": {
+            "namespace": "tenant-a",
+            "grace_period_seconds": 30
+          }
+        }
+      ],
+      "blast_radius_config": {
+        "max_pod_impact_pct": 25,
+        "circuit_breaker_error_rate": 0.2,
+        "allowed_namespaces": [
+          "tenant-a",
+          "tenant-b"
+        ]
+      },
+      "verify_policy": {
+        "window_seconds": 120,
+        "success_conditions": [
+          "pod_ready == true"
+        ]
+      }
+    },
+    "DefaultRecoveryRunbook": {
+      "name": "DefaultRecoveryRunbook",
+      "description": "Fallback rolling restart for unknown faults.",
+      "pattern_type": "urgent",
+      "action_plan": [
+        {
+          "step": 1,
+          "action": "RESTART_DEPLOYMENT",
+          "target": "deployment/{{target_service}}",
+          "params": {
+            "namespace": "tenant-a",
+            "grace_period_seconds": 30
+          }
+        }
+      ],
+      "blast_radius_config": {
+        "max_pod_impact_pct": 25,
+        "circuit_breaker_error_rate": 0.2,
+        "allowed_namespaces": [
+          "tenant-a",
+          "tenant-b"
+        ]
+      },
+      "verify_policy": {
+        "window_seconds": 120,
+        "success_conditions": [
+          "pod_ready == true"
+        ]
+      }
+    }
+  }
+}

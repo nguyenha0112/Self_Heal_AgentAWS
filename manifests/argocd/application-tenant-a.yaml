@@ -13,7 +13,7 @@ spec:
     targetRevision: HEAD
     path: manifests/workloads
     directory:
-      include: tenant-a-sample-app.yaml
+      include: "{tenant-a-sample-app.yaml,ecommerce-api-tenant-a.yaml,ecommerce-web-tenant-a.yaml}"
 
   destination:
     server: https://kubernetes.default.svc

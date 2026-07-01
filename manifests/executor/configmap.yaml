@@ -12,6 +12,8 @@ data:
   AI_BASE_URL: "http://ai-engine.self-heal-system.svc.cluster.local:8080"
   CDO_EXECUTOR_NS: "self-heal-system"
   CDO_TENANT_NAMESPACES: "tenant-a,tenant-b"
+  CDO_SYSTEM_ID: "E-COMMERCE"
+  AI_PLATFORM_PROFILE: "cdo"
   AWS_REGION: "ap-southeast-1"
   CDO_IDEMPOTENCY_TABLE: "cdo-idempotency-dev"           # = terraform output dynamodb_table_name
   CDO_AUDIT_BUCKET: "cdo-audit-cdo-eks-cluster-dev-dev"  # = terraform output audit_bucket_name

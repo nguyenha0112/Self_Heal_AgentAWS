@@ -53,6 +53,8 @@ class DetectResponse:
     reasoning: str
     correlation_id: str
     anomaly_context: AnomalyContext | None = None
+    service_top_k: list[str] = field(default_factory=list)
+    llm_fault_rank_evidence: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> "DetectResponse":
@@ -64,7 +66,17 @@ class DetectResponse:
             reasoning=d["reasoning"],
             correlation_id=d["correlation_id"],
             anomaly_context=AnomalyContext.from_dict(ctx) if ctx else None,
+            service_top_k=d.get("service_top_k", []),
+            llm_fault_rank_evidence=d.get("llm_fault_rank_evidence", {}),
         )
+
+    def detect_evidence(self) -> dict[str, Any]:
+        evidence: dict[str, Any] = {}
+        if self.service_top_k:
+            evidence["service_top_k"] = self.service_top_k
+        if self.llm_fault_rank_evidence:
+            evidence.update(self.llm_fault_rank_evidence)
+        return evidence
 
 
 # ---------- /v1/decide ----------

@@ -1,0 +1,89 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-engine
+  namespace: self-heal-system
+  labels:
+    app: ai-engine
+    component: ai-engine
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: ai-engine
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: ai-engine
+        component: ai-engine
+    spec:
+      serviceAccountName: ai-engine
+      containers:
+        - name: ai-engine
+          image: ai-engine:replace-me
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: API_HOST
+              value: "0.0.0.0"
+            - name: API_PORT
+              value: "8080"
+            - name: TELEMETRY_RUNTIME_MODE
+              value: "cdo_push"
+            - name: PLATFORM_PROFILE_PATH
+              value: "/app/config/platform_profile_cdo.json"
+            - name: TELEMETRY_SIGNAL_NAMES_PATH
+              value: "/app/adr/telemetry_signal_names.json"
+            - name: K8S_IN_CLUSTER
+              value: "True"
+            - name: K8S_NAMESPACE
+              value: "tenant-a"
+            - name: USE_LLM_DECISION
+              value: "false"
+            - name: USE_LLM_FAULT_TYPE
+              value: "false"
+            - name: AWS_REGION
+              value: "ap-southeast-1"
+            - name: BEDROCK_SECRET_PATH
+              value: "tf-3/ai-engine/bedrock"
+          volumeMounts:
+            - name: platform-profile
+              mountPath: /app/config
+              readOnly: true
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "1024Mi"
+            limits:
+              cpu: "1000m"
+              memory: "2048Mi"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            failureThreshold: 3
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            capabilities:
+              drop: ["ALL"]
+      volumes:
+        - name: platform-profile
+          configMap:
+            name: ai-engine-platform-profile

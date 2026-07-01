@@ -126,7 +126,12 @@ class Executor:
             log.event(A.LOCK_ACQUIRED, idempotency_key=idem_key)
 
             log.event(A.DECIDE_CALLED, idempotency_key=idem_key)
-            decide = self.ai.decide(detect.anomaly_context, correlation_id, idem_key)
+            decide = self.ai.decide(
+                detect.anomaly_context,
+                correlation_id,
+                idem_key,
+                detect_evidence=detect.detect_evidence(),
+            )
             ctx.decide = decide
             first = decide.action_plan[0] if decide.action_plan else None
             log.event(A.ACTION_PLAN, action_type=first.action if first else None,
@@ -135,7 +140,8 @@ class Executor:
 
             # cost_cap_exceeded: vẫn execute, chỉ log cảnh báo (TC-17)
             if decide.cost_cap_exceeded:
-                log.event("cost_cap_exceeded_warning", reason="ai_rule_based_fallback")
+                log.event(A.LLM_COST_CAP_EXCEEDED, source="ai_engine",
+                          fallback="rule_based")
 
             # ---------- [3] SAFETY GATE ----------
             try:

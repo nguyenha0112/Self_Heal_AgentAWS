@@ -46,8 +46,10 @@ class Config:
         "http://ai-engine.self-heal-system.svc.cluster.local:8080",
     )
     ai_timeout_detect_s: float = _env_float("AI_TIMEOUT_DETECT_S", 1.0)   # SLA p99 < 300ms
-    ai_timeout_decide_s: float = _env_float("AI_TIMEOUT_DECIDE_S", 4.0)   # SLA p99 < 3000ms (LLM)
-    ai_timeout_verify_s: float = _env_float("AI_TIMEOUT_VERIFY_S", 1.5)   # SLA p99 < 500ms
+    ai_timeout_decide_s: float = _env_float("AI_TIMEOUT_DECIDE_S", 5.0)   # SLA p99 < 3000ms (LLM)
+    ai_timeout_verify_s: float = _env_float("AI_TIMEOUT_VERIFY_S", 2.0)   # SLA p99 < 500ms
+    ai_platform_profile: str = _env("AI_PLATFORM_PROFILE", "online_boutique")
+    system_identifier: str = _env("CDO_SYSTEM_ID", "E-COMMERCE")
     dry_run_mode: bool = _env("CDO_DRY_RUN", "false").lower() == "true"
 
     # --- Namespace / executor identity ---

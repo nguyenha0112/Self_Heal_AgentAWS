@@ -69,6 +69,22 @@ def test_servicemonitor_has_release_label():
         f"Expected release=kube-prometheus-stack, got {labels['release']}"
 
 
+def test_ecommerce_servicemonitor_targets_http_port():
+    """
+    Ecommerce demo exposes metrics on the main HTTP port, unlike podinfo.
+    """
+    sm_path = ROOT / "manifests" / "observability" / "servicemonitor-ecommerce-demo.yaml"
+    assert sm_path.exists(), f"Missing: {sm_path}"
+
+    sm = _load_yaml(sm_path)
+    assert sm["kind"] == "ServiceMonitor"
+    assert sm["metadata"]["labels"]["release"] == "kube-prometheus-stack"
+    assert sm["spec"]["selector"]["matchLabels"]["tier"] == "cdo-ecommerce-demo"
+    assert sm["spec"]["selector"]["matchLabels"]["service"] == "ecommerce-api"
+    assert sm["spec"]["endpoints"][0]["port"] == "http"
+    assert sm["spec"]["endpoints"][0]["path"] == "/metrics"
+
+
 def test_workload_service_has_matching_label():
     """
     Service trong tenant-a & tenant-b PHẢI có label `tier=cdo-sample` để

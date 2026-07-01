@@ -23,6 +23,27 @@ Image đang dùng:
 ghcr.io/stefanprodan/podinfo:6.14.0
 ```
 
+## Ecommerce Demo Workload
+
+For the richer CDO demo app, use the ecommerce workload from:
+
+```text
+D:\Xbrain\Phase2\react-ecommerce
+https://github.com/hailv1209/Capstone_phase2_Demo_Ecommerce.git
+```
+
+The ecommerce app provides realistic `/metrics`, JSON logs, readiness checks,
+and fault injection endpoints for latency, error-rate, and memory scenarios.
+Render its tenant manifests into this directory with:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\render-ecommerce-demo-manifests.ps1 `
+  -ApiImage "<account>.dkr.ecr.<region>.amazonaws.com/tf3-cdo02/ecommerce-api:<tag>" `
+  -WebImage "<account>.dkr.ecr.<region>.amazonaws.com/tf3-cdo02/ecommerce-web:<tag>"
+```
+
+Full CD handoff steps are in `docs/DEMO_ECOMMERCE_MAPPING.md`.
+
 ## Mapping Chính
 
 ```text

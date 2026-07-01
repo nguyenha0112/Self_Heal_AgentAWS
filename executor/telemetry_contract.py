@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import re
 import time
+import os
 from copy import deepcopy
 from typing import Any
 
@@ -27,6 +28,12 @@ ALLOWED_SIGNALS: frozenset[str] = frozenset({
     "db_connection_pool_saturation",
     "secret_expiry_warning",
 })
+
+LOG_SIGNAL_NAMES: frozenset[str] = frozenset({
+    "application_log_event",
+    "distributed_trace_error_event",
+})
+DEFAULT_SYSTEM_IDENTIFIER = os.environ.get("CDO_SYSTEM_ID", "E-COMMERCE")
 
 SIGNAL_ALIASES: dict[str, str] = {
     "error_rate": "service_error_rate",
@@ -74,6 +81,7 @@ def map_signal_name(raw_signal: str) -> str:
 def normalize_point(raw: dict[str, Any], *, tenant_id: str) -> dict[str, Any]:
     point = deepcopy(raw)
     labels = point.get("labels") or {}
+    labels.setdefault("system", DEFAULT_SYSTEM_IDENTIFIER)
     signal_name = map_signal_name(str(point.get("signal_name", "")).strip())
 
     normalized = {
@@ -99,6 +107,14 @@ def validate_point(point: dict[str, Any], *, tenant_id: str) -> None:
         raise TelemetryContractError(f"unsupported_signal_name:{point['signal_name']}")
     if not isinstance(point["labels"], dict):
         raise TelemetryContractError("labels_must_be_object")
+    if "system" not in point["labels"]:
+        raise TelemetryContractError("missing_label:system")
+    value = point["value"]
+    if point["signal_name"] in LOG_SIGNAL_NAMES:
+        if not isinstance(value, str):
+            raise TelemetryContractError(f"value_must_be_string:{point['signal_name']}")
+    elif not isinstance(value, (int, float)):
+        raise TelemetryContractError(f"value_must_be_number:{point['signal_name']}")
 
 
 def normalize_window(raw_points: list[dict[str, Any]], *, tenant_id: str) -> list[dict[str, Any]]:

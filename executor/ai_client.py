@@ -1,7 +1,8 @@
 """
-HTTP client cho 3 AI endpoint (contract-new-4 §3, §4).
-Xử lý header bắt buộc, timeout per-endpoint, và error/retry policy §4.
-Auth: Local Trust + K8s NetworkPolicy — KHÔNG ký SigV4 cho AI endpoint.
+HTTP client for the AI Engine endpoints.
+
+Adds the required contract headers, endpoint-specific timeouts, retry handling,
+and CDO-to-AI fault type translation before /v1/decide.
 """
 from __future__ import annotations
 
@@ -21,6 +22,7 @@ from errors import (
     AIUnavailable,
 )
 from models import AnomalyContext, DecideResponse, DetectResponse, VerifyResponse
+from signal_registry import to_ai_fault_type
 
 
 def new_uuid() -> str:
@@ -32,28 +34,36 @@ class AIClient:
         self.cfg = cfg
         self._session = requests.Session()
 
-    # ---------- public API ----------
-
-    def detect(self, telemetry_window: list[dict], correlation_id: str,
-               idempotency_key: str | None = None) -> DetectResponse:
+    def detect(self, telemetry_window: list[dict] | None, correlation_id: str,
+               idempotency_key: str | None = None,
+               telemetry_source: dict[str, Any] | None = None) -> DetectResponse:
+        if not telemetry_window and not telemetry_source:
+            raise ValueError("detect requires telemetry_window or telemetry_source")
         body = {
             "correlation_id": correlation_id,
             "idempotency_key": idempotency_key or new_uuid(),
             "dry_run_mode": self.cfg.dry_run_mode,
-            "telemetry_window": telemetry_window,
         }
+        if telemetry_source is not None:
+            body["telemetry_source"] = telemetry_source
+        else:
+            body["telemetry_window"] = telemetry_window
         data = self._post("/v1/detect", body, correlation_id, self.cfg.ai_timeout_detect_s)
         return DetectResponse.from_dict(data)
 
     def decide(self, anomaly_context: AnomalyContext, correlation_id: str,
-               idempotency_key: str) -> DecideResponse:
-        # /v1/decide: idempotency_key đã được lock ở DynamoDB (idempotency.py) trước khi gọi
+               idempotency_key: str,
+               detect_evidence: dict[str, Any] | None = None) -> DecideResponse:
+        ctx = anomaly_context.to_dict()
+        ctx["suspected_fault_type"] = to_ai_fault_type(ctx.get("suspected_fault_type"))
         body = {
             "correlation_id": correlation_id,
             "idempotency_key": idempotency_key,
             "dry_run_mode": self.cfg.dry_run_mode,
-            "anomaly_context": anomaly_context.to_dict(),
+            "anomaly_context": ctx,
         }
+        if detect_evidence:
+            body["detect_evidence"] = detect_evidence
         data = self._post("/v1/decide", body, correlation_id, self.cfg.ai_timeout_decide_s)
         return DecideResponse.from_dict(data)
 
@@ -69,8 +79,6 @@ class AIClient:
         data = self._post("/v1/verify", body, correlation_id, self.cfg.ai_timeout_verify_s)
         return VerifyResponse.from_dict(data)
 
-    # ---------- internals ----------
-
     def _headers(self, correlation_id: str, idempotency_key: str) -> dict[str, str]:
         return {
             "Content-Type": "application/json",
@@ -81,7 +89,6 @@ class AIClient:
         }
 
     def _post(self, path: str, body: dict, correlation_id: str, timeout_s: float) -> dict:
-        """Gọi POST + áp dụng error/retry policy contract §4."""
         url = f"{self.cfg.ai_base_url}{path}"
         headers = self._headers(correlation_id, body["idempotency_key"])
 
@@ -91,7 +98,6 @@ class AIClient:
             try:
                 resp = self._session.post(url, json=body, headers=headers, timeout=timeout_s)
             except requests.Timeout:
-                # timeout coi như upstream unavailable → escalate, không execute
                 raise AIUnavailable(f"timeout calling {path} after {timeout_s}s")
             except requests.RequestException as e:
                 raise AIUnavailable(f"connection error calling {path}: {e}")
@@ -110,9 +116,8 @@ class AIClient:
             if code == 429:
                 if rl_attempt >= self.cfg.http_429_max_retries:
                     raise AIUnavailable(
-                        f"429 rate-limited {rl_attempt} lần liên tiếp tại {path} → escalate")
+                        f"429 rate-limited {rl_attempt} consecutive times at {path}")
                 retry_after = float(resp.headers.get("Retry-After", "1"))
-                # backoff theo Retry-After rồi thử lại (không tính vào quota 500)
                 time.sleep(retry_after)
                 rl_attempt += 1
                 continue
@@ -124,7 +129,6 @@ class AIClient:
                 raise AIInternalError(self._msg(resp))
             if code == 503:
                 raise AIUnavailable(self._msg(resp))
-            # mã lạ → coi như unavailable, fail-safe
             raise AIUnavailable(f"unexpected status {code}: {self._msg(resp)}")
 
     @staticmethod

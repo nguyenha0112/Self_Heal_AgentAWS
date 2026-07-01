@@ -42,10 +42,13 @@ spec:
     # ----- service_error_rate > 5% trong 5 phút -----
     - alert: CDOServiceErrorRateHigh
       expr: |
-        sum by (namespace, deployment) (
-          rate(
-            http_requests_total{job=~".+",code=~"5.."}
-            [5m]
+        (
+          sum by (namespace, deployment) (
+            rate(http_requests_total{job=~".+",code=~"5.."}[5m])
+          )
+          +
+          sum by (namespace, deployment) (
+            rate(http_requests_total{job=~".+",status=~"5.."}[5m])
           )
         )
         /

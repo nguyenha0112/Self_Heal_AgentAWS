@@ -6,14 +6,15 @@ TENANT = "6c8b4b2b-4d45-4209-a1b4-4b532d56a31c"
 def test_normalize_alias_and_scrub_pii():
     raw = [{
         "service": "checkout",
-        "signal_name": "error_rate",
+        "signal_name": "log_event",
         "value": "user=test@example.com password=secret",
         "labels": {"deployment": "checkout", "namespace": "tenant-a"},
     }]
     window = normalize_window(raw, tenant_id=TENANT)
-    assert window[0]["signal_name"] == "service_error_rate"
+    assert window[0]["signal_name"] == "application_log_event"
     assert "[REDACTED_EMAIL]" in window[0]["value"]
     assert "[REDACTED]" in window[0]["value"]
+    assert window[0]["labels"]["system"] == "E-COMMERCE"
 
 
 def test_preserves_valid_contract_point():
@@ -28,3 +29,18 @@ def test_preserves_valid_contract_point():
     window = normalize_window(raw, tenant_id=TENANT)
     assert window[0]["signal_name"] == "queue_backlog"
     assert window[0]["value"] == 15000
+
+
+def test_rejects_string_value_for_metric_signal():
+    raw = [{
+        "service": "checkout",
+        "signal_name": "service_error_rate",
+        "value": "0.05",
+        "labels": {"namespace": "tenant-a", "deployment": "checkout"},
+    }]
+    try:
+        normalize_window(raw, tenant_id=TENANT)
+    except Exception as exc:
+        assert "value_must_be_number:service_error_rate" in str(exc)
+    else:
+        raise AssertionError("expected metric string value to be rejected")

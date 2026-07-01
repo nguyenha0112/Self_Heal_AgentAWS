@@ -1,42 +1,50 @@
 # Fresh Infra Deploy Runbook
 
-Tài liệu này ghi lại các bước đã chạy để deploy mới hoàn toàn hạ tầng trong `infra/` trên AWS account hiện tại, không dùng account cũ. Phần cuối có thêm hướng dẫn demo self-heal ở chế độ production `--watch`, luồng hoạt động và cách nghiệm thu.
+Runbook nay mo ta cac buoc deploy moi ha tang CDO tren AWS/EKS, cap nhat cho
+demo ecommerce app thay vi chi dung workload rong/podinfo. Tai lieu chi la
+huong dan thao tac; khong co buoc nao trong file nay da duoc tu dong chay.
 
-## Thông tin lần deploy này
+## Thong Tin Deploy
 
-- AWS account: `593777010472`
+- AWS account hien tai: `593777010472`
 - Region: `ap-southeast-1`
 - Terraform state bucket: `cdo-tf-state-593777010472-ap-southeast-1-dev`
 - Terraform state key: `envs/dev/terraform.tfstate`
 - EKS cluster: `cdo-eks-cluster-dev`
-- ECR repo: `593777010472.dkr.ecr.ap-southeast-1.amazonaws.com/cdo-executor`
-- Image đã push: `593777010472.dkr.ecr.ap-southeast-1.amazonaws.com/cdo-executor:deploy-20260630-170855`
-- Audit bucket: `cdo-audit-593777010472-cdo-eks-cluster-dev-dev`
-- Executor IRSA role: `arn:aws:iam::593777010472:role/cdo-executor-irsa-cdo-eks-cluster-dev`
+- Executor ECR repo: `593777010472.dkr.ecr.ap-southeast-1.amazonaws.com/cdo-executor`
+- Audit bucket mau: `cdo-audit-593777010472-cdo-eks-cluster-dev-dev`
+- CDO repo local: `D:\Xbrain\Phase2\nguyen\Self_Heal_AgentAWS`
+- Ecommerce demo repo local: `D:\Xbrain\Phase2\react-ecommerce`
+- Ecommerce demo GitHub: `https://github.com/hailv1209/Capstone_phase2_Demo_Ecommerce.git`
+- AI Engine local: `D:\Xbrain\Phase2\Capstone-Phase-2-Code\tf-3\ai\ai-engine\detect_decide_verify`
 
-## 1. Kiểm tra tool và AWS identity
+## 1. Preflight
 
-Chạy từ root repo:
+Chay tu root CDO repo:
 
 ```powershell
+cd D:\Xbrain\Phase2\nguyen\Self_Heal_AgentAWS
+
 aws sts get-caller-identity
 aws configure get region
 terraform version
 kubectl version --client=true
 helm version
 docker --version
+docker info
 ```
 
-Yêu cầu:
+Yeu cau:
 
-- Terraform `>= 1.10`
-- AWS CLI đang trỏ đúng account deploy mới
-- Region deploy là `ap-southeast-1`
-- Docker Desktop/daemon phải chạy trước bước build image
+- AWS CLI tro dung account deploy.
+- Region la `ap-southeast-1`.
+- Terraform `>= 1.10`.
+- Docker Desktop/daemon dang chay truoc khi build executor, AI Engine, va demo app images.
+- Git Bash ton tai tai `D:\Program Files\Git\bin\bash.exe` neu dung script build cua ecommerce repo.
 
-## 2. Cập nhật account mới trong Terraform
+## 2. Cap Nhat Terraform Account/Backend
 
-Sửa `infra/envs/dev/providers.tf`:
+Neu deploy fresh tren account `593777010472`, kiem tra `infra/envs/dev/providers.tf`:
 
 ```hcl
 backend "s3" {
@@ -48,22 +56,22 @@ backend "s3" {
 }
 ```
 
-Sửa `infra/envs/dev/variables.tf`:
+Kiem tra `infra/envs/dev/variables.tf`:
 
 ```hcl
 variable "aws_account_id" { default = "593777010472" }
 ```
 
-## 3. Bootstrap S3 remote state
+## 3. Bootstrap S3 Remote State
 
-Chỉ cần làm một lần cho account/region mới.
+Chi can lam mot lan cho account/region moi:
 
 ```powershell
 terraform -chdir=infra\bootstrap init
 terraform -chdir=infra\bootstrap apply -auto-approve
 ```
 
-Kiểm tra bucket:
+Verify bucket:
 
 ```powershell
 aws s3api head-bucket `
@@ -71,9 +79,9 @@ aws s3api head-bucket `
   --region ap-southeast-1
 ```
 
-## 4. Init, plan, apply Terraform env dev
+## 4. Init, Plan, Apply Terraform Env Dev
 
-Thêm Helm repo cache trước khi apply:
+Them Helm repo cache truoc:
 
 ```powershell
 helm repo add argo https://argoproj.github.io/argo-helm
@@ -83,7 +91,7 @@ helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm
 helm repo update
 ```
 
-Chạy Terraform:
+Chay Terraform:
 
 ```powershell
 terraform -chdir=infra\envs\dev init -reconfigure
@@ -92,16 +100,16 @@ terraform -chdir=infra\envs\dev plan "-out=tfplan-dev.out"
 terraform -chdir=infra\envs\dev apply tfplan-dev.out
 ```
 
-Verify Terraform:
+Verify:
 
 ```powershell
 terraform -chdir=infra\envs\dev plan -detailed-exitcode
 terraform -chdir=infra\envs\dev output
 ```
 
-Kết quả mong đợi: `No changes`.
+Ket qua mong doi: plan exit code `0`, khong co changes.
 
-## 5. Update kubeconfig và verify EKS
+## 5. Update Kubeconfig Va Verify EKS
 
 ```powershell
 aws eks update-kubeconfig `
@@ -112,24 +120,16 @@ kubectl get nodes -o wide
 kubectl get pods -A
 ```
 
-Kết quả mong đợi:
+Ket qua mong doi:
 
-- 2 node `Ready`
-- Pods trong `argocd`, `kyverno`, `monitoring`, `kube-system` Running
+- Node group Ready.
+- Pods nen tang trong `argocd`, `kyverno`, `monitoring`, `kube-system` Running hoac Completed.
 
-## 6. Build và push executor image
-
-Nếu Docker daemon chưa chạy, mở Docker Desktop trước:
+## 6. Build Va Push CDO Executor Image
 
 ```powershell
-Start-Process -FilePath "C:\Program Files\Docker\Docker\Docker Desktop.exe" -WindowStyle Hidden
-Start-Sleep -Seconds 20
-docker info
-```
+cd D:\Xbrain\Phase2\nguyen\Self_Heal_AgentAWS
 
-Build và push:
-
-```powershell
 $repo = terraform -chdir=infra\envs\dev output -raw ecr_executor_url
 $tag = "deploy-$(Get-Date -Format yyyyMMdd-HHmmss)"
 $registry = ($repo -split "/")[0]
@@ -137,31 +137,147 @@ $pw = aws ecr get-login-password --region ap-southeast-1
 
 docker login --username AWS --password $pw $registry
 
-$image = "${repo}:${tag}"
-docker build --platform linux/amd64 -t $image .\executor
-docker push $image
+$executorImage = "${repo}:${tag}"
+docker build --platform linux/amd64 -t $executorImage .\executor
+docker push $executorImage
 ```
 
-Kiểm tra image:
+Verify image:
 
 ```powershell
 aws ecr describe-images `
   --repository-name cdo-executor `
   --region ap-southeast-1 `
-  --image-ids imageTag=<TAG>
+  --image-ids imageTag=$tag
 ```
 
-## 7. Apply Kubernetes manifests
+## 7. Build Va Push Real AI Engine Image
 
-Lấy output Terraform:
+Khong dung `k8s\02-mock-ai.yaml` cho production demo nua. CDO executor hien tro
+toi real AI Engine service:
+
+```text
+http://ai-engine.self-heal-system.svc.cluster.local:8080
+```
+
+Neu team CD da co ECR repo rieng cho AI Engine thi dung repo do. Neu chua co,
+tao ECR repo mot lan:
 
 ```powershell
-$image = "593777010472.dkr.ecr.ap-southeast-1.amazonaws.com/cdo-executor:<TAG>"
+aws ecr create-repository `
+  --repository-name tf3-cdo02/ai-engine `
+  --region ap-southeast-1
+```
+
+Build/push tu repo AI Engine:
+
+```powershell
+cd D:\Xbrain\Phase2\Capstone-Phase-2-Code\tf-3\ai\ai-engine\detect_decide_verify
+
+$env:AWS_REGION = "ap-southeast-1"
+$env:AWS_ACCOUNT_ID = "593777010472"
+$aiRepo = "$env:AWS_ACCOUNT_ID.dkr.ecr.$env:AWS_REGION.amazonaws.com/tf3-cdo02/ai-engine"
+$aiTag = "deploy-$(Get-Date -Format yyyyMMdd-HHmmss)"
+$registry = "$env:AWS_ACCOUNT_ID.dkr.ecr.$env:AWS_REGION.amazonaws.com"
+$pw = aws ecr get-login-password --region $env:AWS_REGION
+
+docker login --username AWS --password $pw $registry
+docker build --platform linux/amd64 -t "${aiRepo}:${aiTag}" .
+docker push "${aiRepo}:${aiTag}"
+```
+
+Cap nhat image trong `manifests/ai-engine/deployment.yaml` truoc khi apply:
+
+```yaml
+image: 593777010472.dkr.ecr.ap-southeast-1.amazonaws.com/tf3-cdo02/ai-engine:<AI_TAG>
+```
+
+AI Engine chay rule-based mac dinh:
+
+```yaml
+USE_LLM_DECISION=false
+USE_LLM_FAULT_TYPE=false
+PLATFORM_PROFILE_PATH=/app/config/platform_profile_cdo.json
+```
+
+## 8. Build Va Push Ecommerce Demo App Images
+
+Demo app moi nam o repo rieng:
+
+```powershell
+cd D:\Xbrain\Phase2\react-ecommerce
+docker info
+
+$env:AWS_REGION = "ap-southeast-1"
+$env:AWS_ACCOUNT_ID = "593777010472"
+$env:IMAGE_TAG = "demo-$(Get-Date -Format yyyyMMdd-HHmmss)"
+& "D:\Program Files\Git\bin\bash.exe" scripts/ecr-build-push.sh
+```
+
+Images mong doi:
+
+```text
+593777010472.dkr.ecr.ap-southeast-1.amazonaws.com/tf3-cdo02/ecommerce-api:<IMAGE_TAG>
+593777010472.dkr.ecr.ap-southeast-1.amazonaws.com/tf3-cdo02/ecommerce-web:<IMAGE_TAG>
+```
+
+Render manifest tu demo repo sang CDO repo:
+
+```powershell
+cd D:\Xbrain\Phase2\nguyen\Self_Heal_AgentAWS
+
+$apiImage = "593777010472.dkr.ecr.ap-southeast-1.amazonaws.com/tf3-cdo02/ecommerce-api:<IMAGE_TAG>"
+$webImage = "593777010472.dkr.ecr.ap-southeast-1.amazonaws.com/tf3-cdo02/ecommerce-web:<IMAGE_TAG>"
+
+powershell -ExecutionPolicy Bypass -File .\scripts\render-ecommerce-demo-manifests.ps1 `
+  -ApiImage $apiImage `
+  -WebImage $webImage
+```
+
+Script se tao/cap nhat:
+
+```text
+manifests/workloads/ecommerce-api-tenant-a.yaml
+manifests/workloads/ecommerce-api-tenant-b.yaml
+manifests/workloads/ecommerce-web-tenant-a.yaml
+manifests/workloads/ecommerce-web-tenant-b.yaml
+```
+
+## 9. Database Secret Cho Ecommerce API
+
+`ecommerce-api` readiness probe goi DB. Neu thieu Secret hoac DB chua reachable,
+rollout se fail o `/ready`.
+
+Dung file mau trong ecommerce repo:
+
+```text
+D:\Xbrain\Phase2\react-ecommerce\manifests\secrets\ecommerce-db-tenant-a.example.yaml
+D:\Xbrain\Phase2\react-ecommerce\manifests\secrets\ecommerce-db-tenant-b.example.yaml
+```
+
+Tao ban Secret that, cap nhat `DATABASE_URL`, roi apply:
+
+```powershell
+kubectl apply -f <tenant-a-db-secret.yaml>
+kubectl apply -f <tenant-b-db-secret.yaml>
+```
+
+Neu database moi, chay migration/seed job cua ecommerce repo truoc khi expect
+`ecommerce-api` Ready.
+
+## 10. Apply Kubernetes Manifests
+
+Lay output Terraform:
+
+```powershell
+cd D:\Xbrain\Phase2\nguyen\Self_Heal_AgentAWS
+
+$executorImage = "593777010472.dkr.ecr.ap-southeast-1.amazonaws.com/cdo-executor:<EXECUTOR_TAG>"
 $role = terraform -chdir=infra\envs\dev output -raw executor_role_arn
 $audit = terraform -chdir=infra\envs\dev output -raw audit_bucket_name
 ```
 
-Apply namespace, RBAC, workloads, Kyverno policies, NetworkPolicy, mock AI, executor:
+Apply namespace, RBAC, Kyverno, NetworkPolicy:
 
 ```powershell
 kubectl apply -f manifests\namespaces\
@@ -170,18 +286,41 @@ kubectl apply -f manifests\namespaces\
   Replace("REPLACE_WITH_EXECUTOR_ROLE_ARN", $role) |
   kubectl apply -f -
 
-kubectl apply -f k8s\04-workloads.yaml
+kubectl apply -f manifests\rbac\ai-engine-serviceaccount.yaml
 kubectl apply -f manifests\kyverno\policies\
 kubectl apply -f manifests\networkpolicies\
+```
 
-(Get-Content k8s\02-mock-ai.yaml -Raw).
-  Replace("REPLACE_WITH_ECR_URL:latest", $image) |
-  kubectl apply -f -
+Apply real AI Engine:
 
+```powershell
+kubectl apply -f manifests\ai-engine\platform-profile-configmap.yaml
+kubectl apply -f manifests\ai-engine\service.yaml
+kubectl apply -f manifests\ai-engine\deployment.yaml
+kubectl apply -f manifests\ai-engine\hpa.yaml
+kubectl apply -f manifests\ai-engine\networkpolicy.yaml
+```
+
+Apply CDO executor. Neu dung `k8s\03-executor.yaml`, thay image va audit bucket:
+
+```powershell
 (Get-Content k8s\03-executor.yaml -Raw).
-  Replace("REPLACE_WITH_ECR_URL:latest", $image).
+  Replace("REPLACE_WITH_ECR_URL:latest", $executorImage).
   Replace("REPLACE_WITH_AUDIT_BUCKET", $audit) |
   kubectl apply -f -
+```
+
+Khong apply `k8s\02-mock-ai.yaml` trong demo nay.
+
+Apply ecommerce workload va ServiceMonitor:
+
+```powershell
+kubectl apply -f manifests\workloads\ecommerce-api-tenant-a.yaml
+kubectl apply -f manifests\workloads\ecommerce-api-tenant-b.yaml
+kubectl apply -f manifests\workloads\ecommerce-web-tenant-a.yaml
+kubectl apply -f manifests\workloads\ecommerce-web-tenant-b.yaml
+kubectl apply -f manifests\observability\servicemonitor-ecommerce-demo.yaml
+kubectl apply -f manifests\observability\prometheus-rule-service-signals.yaml
 ```
 
 Verify rollout:
@@ -189,82 +328,58 @@ Verify rollout:
 ```powershell
 kubectl rollout status deploy/ai-engine -n self-heal-system --timeout=180s
 kubectl rollout status deploy/cdo-executor -n self-heal-system --timeout=180s
+
+kubectl rollout status deploy/ecommerce-api -n tenant-a --timeout=180s
+kubectl rollout status deploy/ecommerce-web -n tenant-a --timeout=180s
+kubectl rollout status deploy/ecommerce-api -n tenant-b --timeout=180s
+kubectl rollout status deploy/ecommerce-web -n tenant-b --timeout=180s
+
 kubectl get pods -n self-heal-system
-kubectl get pods -n tenant-a
-kubectl get pods -n tenant-b
-kubectl get clusterpolicies
+kubectl get deploy,svc,pod -n tenant-a
+kubectl get deploy,svc,pod -n tenant-b
+kubectl get servicemonitor -n monitoring
 ```
 
-## 8. Đăng ký workload vào ArgoCD
+## 11. Dang Ky Workload Vao ArgoCD
 
-Sau khi ArgoCD Helm release đã chạy, cần tạo `AppProject` và `Application` thì UI ArgoCD mới có app để hiển thị. Nếu chỉ cài ArgoCD control plane mà chưa apply các manifest này, màn hình Applications sẽ trống.
-
-Manifest dùng:
-
-```text
-manifests/argocd/appproject-tenant-a.yaml
-manifests/argocd/appproject-tenant-b.yaml
-manifests/argocd/application-tenant-a.yaml
-manifests/argocd/application-tenant-b.yaml
-```
-
-Hai `Application` trỏ tới GitHub repo:
-
-```yaml
-repoURL: https://github.com/nguyenha0112/Self_Heal_AgentAWS.git
-targetRevision: HEAD
-path: manifests/workloads
-directory:
-  include: tenant-a-sample-app.yaml
-```
-
-Tenant B tương tự nhưng `include: tenant-b-sample-app.yaml`.
-
-Apply ArgoCD manifests:
+Sau khi ArgoCD Helm release da chay, apply AppProject va Application:
 
 ```powershell
 kubectl apply -f manifests\argocd\
 ```
 
-Nếu workload trước đó đã được apply thủ công bằng `k8s\04-workloads.yaml`, có thể gặp lỗi immutable selector khi ArgoCD sync. Cách xử lý là xoá Deployment mẫu cũ để ArgoCD tạo lại theo manifest GitOps:
+Hai Application hien include ca sample va ecommerce manifests:
 
-```powershell
-kubectl delete deploy cdo-sample-api -n tenant-a --ignore-not-found=true
-kubectl delete deploy notification-service -n tenant-b --ignore-not-found=true
-
-kubectl annotate application tenant-a-workloads -n argocd `
-  argocd.argoproj.io/refresh=hard --overwrite
-kubectl annotate application tenant-b-workloads -n argocd `
-  argocd.argoproj.io/refresh=hard --overwrite
+```yaml
+path: manifests/workloads
+directory:
+  include: "{tenant-a-sample-app.yaml,ecommerce-api-tenant-a.yaml,ecommerce-web-tenant-a.yaml}"
 ```
 
-Nếu còn Service cũ từ manifest thủ công, xoá để tránh nhầm lẫn:
+Tenant B tuong tu:
 
-```powershell
-kubectl delete svc checkout-svc -n tenant-a --ignore-not-found=true
-kubectl delete svc notification-svc -n tenant-b --ignore-not-found=true
+```yaml
+include: "{tenant-b-sample-app.yaml,ecommerce-api-tenant-b.yaml,ecommerce-web-tenant-b.yaml}"
 ```
 
-Verify ArgoCD:
+Verify:
 
 ```powershell
 kubectl get appprojects.argoproj.io -n argocd
 kubectl get applications.argoproj.io -n argocd
-kubectl get deploy,svc -n tenant-a
-kubectl get deploy,svc -n tenant-b
 ```
 
-Kết quả mong đợi:
+Ket qua mong doi:
 
 ```text
-NAME                 SYNC STATUS   HEALTH STATUS
-tenant-a-workloads   Synced        Healthy
-tenant-b-workloads   Synced        Healthy
+tenant-a-workloads   Synced   Healthy
+tenant-b-workloads   Synced   Healthy
 ```
 
-Sau đó refresh UI ArgoCD tại `http://localhost:8080/applications`; sẽ thấy 2 app `tenant-a-workloads` và `tenant-b-workloads`.
+Neu da apply workload thu cong truoc khi ArgoCD sync, xem muc loi immutable
+selector phia duoi.
 
-## 9. Final verification
+## 12. Final Verification
 
 Terraform:
 
@@ -289,6 +404,36 @@ helm status kube-prometheus-stack -n monitoring
 helm status opentelemetry-collector -n monitoring
 ```
 
+AI Engine:
+
+```powershell
+kubectl get deploy,svc,pod -n self-heal-system
+kubectl port-forward -n self-heal-system svc/ai-engine 8080:8080
+curl http://127.0.0.1:8080/health
+curl http://127.0.0.1:8080/ready
+```
+
+Ecommerce API:
+
+```powershell
+kubectl port-forward -n tenant-a svc/ecommerce-api 3000:3000
+curl http://127.0.0.1:3000/health
+curl http://127.0.0.1:3000/ready
+curl http://127.0.0.1:3000/metrics
+```
+
+PromQL check sau khi Prometheus scrape ServiceMonitor:
+
+```promql
+(
+  (sum(rate(http_requests_total{deployment="ecommerce-api",code=~"5.."}[1m])) or vector(0))
+  +
+  (sum(rate(http_requests_total{deployment="ecommerce-api",status=~"5.."}[1m])) or vector(0))
+)
+/
+sum(rate(http_requests_total{deployment="ecommerce-api"}[1m]))
+```
+
 Audit Object Lock:
 
 ```powershell
@@ -297,44 +442,28 @@ aws s3api get-object-lock-configuration `
   --region ap-southeast-1
 ```
 
-Kết quả mong đợi:
+## 13. Demo Self-Heal Voi Ecommerce App
 
-- Terraform: `No changes`
-- Helm releases: `STATUS: deployed`
-- Pods: Running
-- ArgoCD Applications: `Synced`, `Healthy`
-- Audit bucket: `ObjectLockEnabled=Enabled`, `Mode=GOVERNANCE`, `Days=90`
-
-## 10. Demo self-heal production `--watch`
-
-### 10.1. Kiểm tra trạng thái trước demo
-
-Executor hiện nên chạy ở watch mode:
+### 13.1. Kiem Tra Executor Watch Mode
 
 ```powershell
-kubectl logs deploy/cdo-executor -n self-heal-system --tail=20
+kubectl logs deploy/cdo-executor -n self-heal-system --tail=30
 ```
 
-Log mong đợi:
+Log mong doi:
 
 ```text
 [watcher] poll=15s cooldown=300s namespaces=['tenant-a', 'tenant-b']
 ```
 
-Kiểm tra pod và workload mẫu:
-
-```powershell
-kubectl get pods -n self-heal-system
-kubectl get pods -n tenant-a
-kubectl get deploy cdo-sample-api -n tenant-a -o jsonpath='{.spec.template.spec.containers[0].resources.limits.memory}'
-```
-
-Nếu cần ép lại executor sang watch mode:
+Neu can ep executor sang watch mode:
 
 ```powershell
 kubectl set env deploy/cdo-executor -n self-heal-system `
   CDO_POLL_INTERVAL_S=15 `
-  CDO_VERIFY_MAX_WAIT_S=5
+  CDO_VERIFY_MAX_WAIT_S=5 `
+  AI_BASE_URL=http://ai-engine.self-heal-system.svc.cluster.local:8080 `
+  CDO_K8S_MOCK=false
 
 kubectl patch deploy/cdo-executor -n self-heal-system --type=json `
   -p='[{"op":"replace","path":"/spec/template/spec/containers/0/command","value":["python","main.py","--watch"]}]'
@@ -342,118 +471,111 @@ kubectl patch deploy/cdo-executor -n self-heal-system --type=json `
 kubectl rollout status deploy/cdo-executor -n self-heal-system --timeout=180s
 ```
 
-### 10.2. Mở log executor ở một terminal riêng
+### 13.2. Validate Metrics Va Fault Injection Endpoint
+
+```powershell
+kubectl port-forward -n tenant-a svc/ecommerce-api 3000:3000
+
+curl http://127.0.0.1:3000/metrics
+
+curl -X POST http://127.0.0.1:3000/debug/fault/error-rate `
+  -H "Content-Type: application/json" `
+  -d "{\"error_rate\":0.5}"
+```
+
+Luu y: error-rate fault giup verify `service_error_rate`, log JSON, va
+Prometheus scrape. Executor `--watch` hien tu dong bat loi tu Kubernetes pod
+state. Neu chua bat Alertmanager/webhook path, error-rate khong tu dong tao
+incident cho CDO; dung no nhu telemetry validation hoac manual scenario.
+
+Reset fault injection:
+
+```powershell
+curl -X POST http://127.0.0.1:3000/debug/fault/reset
+```
+
+### 13.3. Demo Auto-Heal Chac Chan Bang OOM Tren Ecommerce API
+
+Mo log executor o mot terminal:
 
 ```powershell
 kubectl logs deploy/cdo-executor -n self-heal-system -f
 ```
 
-Để dừng follow log: nhấn `Ctrl+C`.
-
-### 10.3. Gây lỗi OOM thật trên workload tenant-a
-
-Chạy ở terminal khác:
+O terminal khac, gay OOM that tren `ecommerce-api` tenant-a:
 
 ```powershell
-kubectl set resources deploy/cdo-sample-api -n tenant-a -c podinfo `
-  --limits=memory=8Mi `
-  --requests=memory=8Mi
+kubectl set resources deploy/ecommerce-api -n tenant-a -c ecommerce-api `
+  --limits=memory=64Mi `
+  --requests=memory=64Mi
 ```
 
-Theo dõi pod bị restart/OOM:
+Theo doi:
 
 ```powershell
 kubectl get pods -n tenant-a -w
+kubectl describe pod -n tenant-a -l app=ecommerce-api
 ```
 
-Hoặc xem trạng thái pod sau vài chục giây:
+Luong mong doi:
+
+1. `cdo-executor` chay `python main.py --watch`.
+2. Watcher poll namespace `tenant-a,tenant-b`.
+3. Kubernetes ghi `OOMKilled` hoac `lastState.terminated.exitCode=137`.
+4. `watcher.py` map thanh `pod_oom_event` va `OOM_KILL`.
+5. Executor goi real AI Engine `/v1/detect`, `/v1/decide`, `/v1/verify`.
+6. AI Engine tra runbook/action plan tu platform profile.
+7. Safety gate kiem tra namespace/action/blast radius.
+8. Urgent executor dry-run roi patch Deployment neu action duoc allow.
+9. Audit ghi stdout va S3; idempotency ghi DynamoDB.
+
+Nghiem thu:
 
 ```powershell
-kubectl describe pod -n tenant-a -l app=checkout-svc
-```
-
-Nếu workload đã được ArgoCD recreate theo GitOps manifest, label pod là `app=cdo-sample-api`, nên lệnh describe có thể dùng:
-
-```powershell
-kubectl describe pod -n tenant-a -l app=cdo-sample-api
-```
-
-### 10.4. Luồng hoạt động của demo
-
-Luồng thực tế trong code:
-
-1. `cdo-executor` chạy `python main.py --watch`.
-2. Watcher poll pod trong `tenant-a,tenant-b` mỗi `CDO_POLL_INTERVAL_S=15` giây.
-3. Khi `cdo-sample-api` bị OOM, Kubernetes ghi trạng thái container `OOMKilled` hoặc `lastState.terminated.exitCode=137`.
-4. `watcher.py` map lỗi đó thành telemetry signal `pod_oom_event` và fault type `OOM_KILL`.
-5. Executor gọi mock AI service qua `AI_BASE_URL`.
-6. Mock AI detect ra scenario `oom_kill`, decide action `PATCH_MEMORY_LIMIT`, target `deployment/cdo-sample-api`, memory limit `1024Mi`.
-7. Pre-decide gate và safety gate kiểm tra confidence, namespace, action allow-list và giới hạn memory tối đa.
-8. Urgent executor chạy server-side dry-run trước, sau đó patch thật Deployment bằng Kubernetes API.
-9. Executor chờ tối đa `CDO_VERIFY_MAX_WAIT_S=5` giây, scrape lại telemetry, gọi `/v1/verify`.
-10. Nếu verify trả `DONE`, incident được đóng với kết quả `auto_resolved`.
-11. Audit event được in ra stdout và flush thành object trong S3 theo key `audit/<tenant_id>/<correlation_id>.json`.
-12. Idempotency key được ghi vào DynamoDB table `cdo-idempotency-dev` để tránh xử lý trùng cùng incident.
-
-### 10.5. Cách nghiệm thu kết quả
-
-Nghiệm thu Kubernetes patch:
-
-```powershell
-kubectl get deploy cdo-sample-api -n tenant-a `
+kubectl rollout status deploy/ecommerce-api -n tenant-a --timeout=180s
+kubectl get deploy ecommerce-api -n tenant-a `
   -o jsonpath='{.spec.template.spec.containers[0].resources.limits.memory}'
-```
-
-Kết quả mong đợi:
-
-```text
-1024Mi
-```
-
-Kubernetes có thể hiển thị tương đương là `1Gi`.
-
-Nghiệm thu rollout:
-
-```powershell
-kubectl rollout status deploy/cdo-sample-api -n tenant-a --timeout=180s
-kubectl get pods -n tenant-a
-```
-
-Kết quả mong đợi: pod mới `Running`, `READY 1/1`.
-
-Nghiệm thu log executor:
-
-```powershell
 kubectl logs deploy/cdo-executor -n self-heal-system --since=10m
 ```
 
-Các event/log cần thấy:
+Tim cac event/log dang nay:
 
 ```text
-[watcher] phát hiện OOM_KILL tại tenant-a/cdo-sample-api
-action_plan_received ... "action_type":"PATCH_MEMORY_LIMIT"
+[watcher] phat hien OOM_KILL tai tenant-a/ecommerce-api
+detect_called
+action_plan_received
 safety_passed
-execute_done ... "result":"success"
-verify_done ... "next_action":"DONE"
-incident_closed ... "result":"auto_resolved"
+execute_done
+verify_done
+incident_closed
 ```
 
-Nghiệm thu audit S3:
+Reset resource sau demo:
+
+```powershell
+kubectl set resources deploy/ecommerce-api -n tenant-a -c ecommerce-api `
+  --limits=memory=512Mi `
+  --requests=memory=256Mi
+
+kubectl rollout status deploy/ecommerce-api -n tenant-a --timeout=180s
+```
+
+### 13.4. Nghiem Thu Audit Va Idempotency
+
+Audit S3:
 
 ```powershell
 $audit = terraform -chdir=infra\envs\dev output -raw audit_bucket_name
 aws s3 ls "s3://$audit/audit/" --recursive --region ap-southeast-1
 ```
 
-Lấy một object audit mới nhất rồi đọc nội dung:
+Doc mot object audit moi:
 
 ```powershell
 aws s3 cp "s3://$audit/audit/<tenant_id>/<correlation_id>.json" - --region ap-southeast-1
 ```
 
-Trong JSON audit cần thấy chuỗi event tương ứng với `detect_called`, `action_plan_received`, `safety_passed`, `execute_done`, `verify_done`, `incident_closed`.
-
-Nghiệm thu DynamoDB idempotency:
+DynamoDB:
 
 ```powershell
 aws dynamodb scan `
@@ -462,65 +584,45 @@ aws dynamodb scan `
   --max-items 5
 ```
 
-Kết quả mong đợi: có item chứa `idempotency_key` và `expires_at`. Nếu chạy lại cùng incident trong thời gian TTL, executor có thể log `idempotency_duplicate_denied`.
+## Loi Thuong Gap Va Cach Sua
 
-### 10.6. Reset workload sau demo
+### 1. Account Cu Khong Dung Voi Deploy Moi
 
-Đưa workload mẫu về mức ban đầu:
+Hien tuong:
 
-```powershell
-kubectl set resources deploy/cdo-sample-api -n tenant-a -c podinfo `
-  --limits=memory=128Mi `
-  --requests=memory=64Mi
+- Docs/code cu tro account khac.
+- AWS CLI hien tai la `593777010472`.
 
-kubectl rollout status deploy/cdo-sample-api -n tenant-a --timeout=180s
-```
+Cach sua:
 
-## Lỗi đã gặp và cách sửa
+- Chot account deploy bang `aws sts get-caller-identity`.
+- Doi backend bucket va `aws_account_id`.
+- Bootstrap state bucket moi.
 
-### 1. Account cũ không đúng với deploy mới
+### 2. Audit S3 Bucket Name Qua Chung Lam Terraform Treo
 
-Hiện tượng:
+Hien tuong:
 
-- Docs cũ trỏ account `012619468490`
-- Code Terraform ban đầu trỏ `938145531618`
-- AWS CLI hiện tại là `593777010472`
+- `module.audit.aws_s3_bucket.audit` treo lau.
+- `head-bucket` voi ten bucket cu tra `404`.
 
-Cách sửa:
+Cach sua:
 
-- Chốt deploy fresh trên account `593777010472`
-- Đổi S3 backend bucket và `aws_account_id`
-- Bootstrap state bucket mới theo account hiện tại
-
-### 2. Audit S3 bucket name quá chung làm Terraform treo
-
-Hiện tượng:
-
-- `module.audit.aws_s3_bucket.audit` treo hơn 20 phút
-- `aws s3api head-bucket --bucket cdo-audit-cdo-eks-cluster-dev-dev` trả `404`
-
-Nguyên nhân:
-
-- Tên bucket S3 là global. Tên `cdo-audit-cdo-eks-cluster-dev-dev` quá chung, không an toàn cho multi-account fresh deploy.
-
-Cách sửa:
-
-Thêm account ID vào tên audit bucket trong `infra/modules/audit/main.tf`:
+Dung bucket co account id:
 
 ```hcl
 data "aws_caller_identity" "current" {}
 
 resource "aws_s3_bucket" "audit" {
-  bucket        = "cdo-audit-${data.aws_caller_identity.current.account_id}-${var.cluster_name}-${var.environment}"
-  force_destroy = false
-
+  bucket              = "cdo-audit-${data.aws_caller_identity.current.account_id}-${var.cluster_name}-${var.environment}"
+  force_destroy       = false
   object_lock_enabled = true
 }
 ```
 
-### 3. State lock còn lại sau khi dừng Terraform process
+### 3. State Lock Con Lai Sau Khi Dung Terraform Process
 
-Hiện tượng:
+Hien tuong:
 
 ```text
 Error acquiring the state lock
@@ -528,33 +630,25 @@ PreconditionFailed
 Lock Info ID: <LOCK_ID>
 ```
 
-Cách sửa:
+Cach sua:
 
-Chỉ force unlock nếu chắc chắn lock là của session apply vừa bị dừng trên máy mình:
+Chi force-unlock neu chac chan lock la cua session vua bi dung:
 
 ```powershell
 terraform -chdir=infra\envs\dev force-unlock -force <LOCK_ID>
 ```
 
-Sau đó chạy lại:
+Sau do plan/apply lai.
 
-```powershell
-terraform -chdir=infra\envs\dev plan "-out=tfplan-dev-2.out"
-terraform -chdir=infra\envs\dev apply tfplan-dev-2.out
-```
+### 4. OTel Chart Yeu Cau `image.repository`
 
-### 4. OTel chart yêu cầu `image.repository`
-
-Hiện tượng:
+Hien tuong:
 
 ```text
-Error: execution error at (opentelemetry-collector/templates/NOTES.txt:2:3):
 [ERROR] 'image.repository' must be set
 ```
 
-Cách sửa:
-
-Sửa `infra/modules/observability/main.tf`, set image và command:
+Cach sua trong `infra/modules/observability/main.tf`:
 
 ```hcl
 image = {
@@ -565,66 +659,37 @@ command = {
 }
 ```
 
-Đồng thời đổi exporter cũ `logging` sang `debug` vì chart mới dùng `debug` exporter.
+Dong thoi doi exporter cu `logging` sang `debug`.
 
-### 5. Kyverno cleanup job ImagePullBackOff
+### 5. Kyverno Cleanup Job ImagePullBackOff
 
-Hiện tượng:
+Hien tuong:
 
 ```text
 Failed to pull image "bitnami/kubectl:1.28.5"
-docker.io/bitnami/kubectl:1.28.5: not found
 ```
 
-Cách sửa:
-
-Disable các cleanup jobs và post-upgrade cleanup hook trong `infra/modules/kyverno/main.tf`:
+Cach sua: disable cleanup jobs trong `infra/modules/kyverno/main.tf`, roi apply
+Terraform lai:
 
 ```hcl
 set {
   name  = "policyReportsCleanup.enabled"
   value = "false"
 }
-
-set {
-  name  = "cleanupJobs.admissionReports.enabled"
-  value = "false"
-}
-
-set {
-  name  = "cleanupJobs.clusterAdmissionReports.enabled"
-  value = "false"
-}
-
-set {
-  name  = "cleanupJobs.ephemeralReports.enabled"
-  value = "false"
-}
-
-set {
-  name  = "cleanupJobs.clusterEphemeralReports.enabled"
-  value = "false"
-}
 ```
 
-Apply lại Terraform. Release Kyverno phải về:
+Ap dung tuong tu cho cac `cleanupJobs.*.enabled`.
+
+### 6. Docker Daemon Chua Chay
+
+Hien tuong:
 
 ```text
-STATUS: deployed
-```
-
-### 6. Docker daemon chưa chạy
-
-Hiện tượng:
-
-```text
-error during connect:
 open //./pipe/docker_engine: The system cannot find the file specified
 ```
 
-Cách sửa:
-
-Mở Docker Desktop, đợi daemon sẵn sàng:
+Cach sua:
 
 ```powershell
 Start-Process -FilePath "C:\Program Files\Docker\Docker\Docker Desktop.exe" -WindowStyle Hidden
@@ -632,168 +697,169 @@ Start-Sleep -Seconds 20
 docker info
 ```
 
-Nếu lần đầu `docker info` trả 500, đợi thêm 20-30 giây rồi chạy lại.
+Neu `docker info` tra loi 500, doi them 20-30 giay roi chay lai.
 
-### 7. Executor CrashLoopBackOff vì chạy `run_scenarios.py` trong Deployment
+### 7. Executor CrashLoopBackOff Vi Chay Scenario Runner Trong Deployment
 
-Hiện tượng:
+Hien tuong:
 
-- Pod `cdo-executor` CrashLoopBackOff
-- Log báo scenario runner crash vì deployment trong scenario không tồn tại:
+- Pod executor CrashLoopBackOff.
+- Log bao scenario runner fail vi deployment trong scenario khong ton tai.
 
-```text
-deployments.apps "cdo-orders-api" not found
-```
+Cach sua:
 
-Nguyên nhân:
-
-- `k8s/03-executor.yaml` chạy `python run_scenarios.py`, phù hợp test Job hơn là Deployment dài hạn.
-
-Cách sửa:
-
-Đổi executor Deployment sang watch mode:
+Deployment runtime phai chay watch mode:
 
 ```yaml
 command: ["python", "main.py", "--watch"]
 ```
 
-Thêm env:
+Env can co:
 
 ```yaml
-- name: CDO_POLL_INTERVAL_S
-  value: "15"
-- name: CDO_VERIFY_MAX_WAIT_S
-  value: "5"
+AI_BASE_URL=http://ai-engine.self-heal-system.svc.cluster.local:8080
+CDO_K8S_MOCK=false
+CDO_TENANT_NAMESPACES=tenant-a,tenant-b
+CDO_POLL_INTERVAL_S=15
+CDO_VERIFY_MAX_WAIT_S=5
 ```
 
-Apply lại manifest executor:
+### 8. Van Apply Mock AI Server
 
-```powershell
-(Get-Content k8s\03-executor.yaml -Raw).
-  Replace("REPLACE_WITH_ECR_URL:latest", $image).
-  Replace("REPLACE_WITH_AUDIT_BUCKET", $audit) |
-  kubectl apply -f -
+Hien tuong:
 
-kubectl rollout status deploy/cdo-executor -n self-heal-system --timeout=180s
-```
+- `ai-engine` pod chay image executor va command `python mock_ai_server.py`.
+- CDO khong goi real detect/decide/verify engine.
 
-Log mong đợi:
+Cach sua:
+
+- Khong apply `k8s\02-mock-ai.yaml`.
+- Apply `manifests\ai-engine\platform-profile-configmap.yaml`.
+- Apply `manifests\ai-engine\deployment.yaml`, `service.yaml`, `hpa.yaml`,
+  `networkpolicy.yaml`.
+- Dam bao image trong deployment la AI Engine image that, khong phai executor image.
+
+### 9. AI Engine Image Van La `ai-engine:replace-me`
+
+Hien tuong:
 
 ```text
-[watcher] poll=15s cooldown=300s namespaces=['tenant-a', 'tenant-b']
+ErrImagePull / ImagePullBackOff
 ```
 
-### 8. PowerShell quoting/jsonpath nhỏ
+Cach sua:
 
-Hiện tượng:
+- Build/push AI Engine image len ECR.
+- Sua `manifests/ai-engine/deployment.yaml`:
 
-- `kubectl describe ... --tail` fail vì `describe` không có flag `--tail`
-- JsonPath có dấu quote hoặc escape sai có thể bị PowerShell truyền lỗi
+```yaml
+image: 593777010472.dkr.ecr.ap-southeast-1.amazonaws.com/tf3-cdo02/ai-engine:<AI_TAG>
+```
 
-Cách xử lý:
-
-- Dùng `kubectl logs ... --tail=N` cho log
-- Với JsonPath trên PowerShell, dùng biểu thức đơn giản hoặc tách command:
+Apply lai va rollout:
 
 ```powershell
-kubectl get deploy cdo-sample-api -n tenant-a -o jsonpath='{.spec.template.spec.containers[0].resources.limits.memory}'
-kubectl logs deploy/cdo-executor -n self-heal-system --tail=20
+kubectl apply -f manifests\ai-engine\deployment.yaml
+kubectl rollout status deploy/ai-engine -n self-heal-system --timeout=180s
 ```
 
-### 9. ArgoCD UI trống vì chưa tạo Application
+### 10. Ecommerce API Khong Ready Vi Thieu DB Secret
 
-Hiện tượng:
+Hien tuong:
 
-- Vào ArgoCD UI thấy `No applications available`.
-- Kiểm tra Kubernetes:
+- `ecommerce-api` pod Running nhung `READY 0/1`.
+- `/ready` fail.
+- Event/log lien quan Secret `ecommerce-db` hoac DB connection.
+
+Cach sua:
+
+- Tao Secret `ecommerce-db` cho ca `tenant-a` va `tenant-b`.
+- Cap nhat `DATABASE_URL` dung RDS/Postgres endpoint.
+- Chay migration/seed neu DB moi.
+- Rollout lai `ecommerce-api`.
+
+### 11. Service Error Rate Khong Co Data
+
+Hien tuong:
+
+- `/metrics` co `http_requests_total{status="500"}`.
+- PromQL cu filter `code=~"5.."` nen khong ra data.
+
+Cach sua:
+
+- CDO collector va PrometheusRule phai support ca `code` va `status`.
+- Apply `manifests/observability/prometheus-rule-service-signals.yaml`.
+- ServiceMonitor ecommerce chi scrape `service=ecommerce-api` vi web app khong co `/metrics`.
+
+### 12. ArgoCD UI Trong Vi Chua Tao Application
+
+Hien tuong:
 
 ```powershell
 kubectl get applications.argoproj.io -A
 ```
 
-trả:
+tra:
 
 ```text
 No resources found
 ```
 
-Nguyên nhân:
-
-- Terraform/Helm mới chỉ cài ArgoCD control plane.
-- Chưa apply các manifest `Application` và `AppProject` trong `manifests/argocd`.
-
-Cách sửa:
+Cach sua:
 
 ```powershell
 kubectl apply -f manifests\argocd\
 kubectl get applications.argoproj.io -n argocd
 ```
 
-Kết quả cuối cùng sau khi sửa:
+### 13. AppProject Bi Reject Vi Field `spec.syncPolicy`
+
+Hien tuong:
 
 ```text
-NAME                 SYNC STATUS   HEALTH STATUS
-tenant-a-workloads   Synced        Healthy
-tenant-b-workloads   Synced        Healthy
-```
-
-### 10. AppProject bị reject vì field `spec.syncPolicy`
-
-Hiện tượng:
-
-```text
-AppProject in version "v1alpha1" cannot be handled as a AppProject:
 strict decoding error: unknown field "spec.syncPolicy"
 ```
 
-Nguyên nhân:
+Cach sua:
 
-- `syncPolicy` là field của `Application`, không phải field hợp lệ trong `AppProject` schema của ArgoCD v2.13.
+- Xoa `spec.syncPolicy` khoi `AppProject`.
+- `syncPolicy` chi nam trong `Application`.
 
-Cách sửa:
+### 14. ArgoCD Sync Fail Vi Deployment Selector Immutable
 
-- Xoá block `spec.syncPolicy` khỏi:
-  - `manifests/argocd/appproject-tenant-a.yaml`
-  - `manifests/argocd/appproject-tenant-b.yaml`
-- Apply lại:
-
-```powershell
-kubectl apply -f manifests\argocd\appproject-tenant-a.yaml `
-  -f manifests\argocd\appproject-tenant-b.yaml
-```
-
-### 11. ArgoCD sync fail vì Deployment selector immutable
-
-Hiện tượng:
+Hien tuong:
 
 ```text
-Deployment.apps "cdo-sample-api" is invalid:
+Deployment.apps "<name>" is invalid:
 spec.selector: Invalid value ... field is immutable
 ```
 
-Tương tự với `notification-service`.
+Nguyen nhan:
 
-Nguyên nhân:
+- Workload da duoc apply thu cong bang manifest cu.
+- ArgoCD sync manifest moi co selector khac.
 
-- Workload mẫu đã được apply thủ công trước đó từ `k8s\04-workloads.yaml`.
-- Manifest thủ công dùng selector:
-  - tenant-a: `app=checkout-svc`
-  - tenant-b: `app=notification-svc`
-- Manifest GitOps trong `manifests/workloads` dùng selector:
-  - tenant-a: `app=cdo-sample-api`
-  - tenant-b: `app=notification-service`
-- Kubernetes không cho đổi `spec.selector` của Deployment sau khi đã tạo.
+Cach sua:
 
-Cách sửa:
-
-Xoá Deployment mẫu cũ để ArgoCD tạo lại theo GitOps source:
+Voi sample workload cu:
 
 ```powershell
 kubectl delete deploy cdo-sample-api -n tenant-a --ignore-not-found=true
 kubectl delete deploy notification-service -n tenant-b --ignore-not-found=true
+kubectl delete svc checkout-svc -n tenant-a --ignore-not-found=true
+kubectl delete svc notification-svc -n tenant-b --ignore-not-found=true
 ```
 
-Refresh ArgoCD app:
+Voi ecommerce workload:
+
+```powershell
+kubectl delete deploy ecommerce-api -n tenant-a --ignore-not-found=true
+kubectl delete deploy ecommerce-web -n tenant-a --ignore-not-found=true
+kubectl delete deploy ecommerce-api -n tenant-b --ignore-not-found=true
+kubectl delete deploy ecommerce-web -n tenant-b --ignore-not-found=true
+```
+
+Refresh ArgoCD:
 
 ```powershell
 kubectl annotate application tenant-a-workloads -n argocd `
@@ -802,31 +868,33 @@ kubectl annotate application tenant-b-workloads -n argocd `
   argocd.argoproj.io/refresh=hard --overwrite
 ```
 
-Xoá Service cũ không còn dùng:
+### 15. PowerShell Quoting/JsonPath Loi
+
+Hien tuong:
+
+- `kubectl describe ... --tail` fail vi `describe` khong co flag `--tail`.
+- JsonPath bi PowerShell escape sai.
+
+Cach sua:
 
 ```powershell
-kubectl delete svc checkout-svc -n tenant-a --ignore-not-found=true
-kubectl delete svc notification-svc -n tenant-b --ignore-not-found=true
+kubectl logs deploy/cdo-executor -n self-heal-system --tail=20
+kubectl get deploy ecommerce-api -n tenant-a -o jsonpath='{.spec.template.spec.containers[0].resources.limits.memory}'
 ```
 
-Verify:
+## Cleanup Khi Khong Can Ha Tang Nua
 
-```powershell
-kubectl get applications.argoproj.io -n argocd
-kubectl get deploy,svc -n tenant-a
-kubectl get deploy,svc -n tenant-b
-```
-
-## Cleanup khi không cần hạ tầng nữa
-
-Hạ tầng này có EKS, NAT Gateway và node group nên sẽ phát sinh chi phí. Khi demo xong:
+Ha tang nay co EKS, NAT Gateway va node group nen se phat sinh chi phi. Khi demo
+xong:
 
 ```powershell
 terraform -chdir=infra\envs\dev destroy
 ```
 
-Lưu ý:
+Luu y:
 
-- Audit bucket bật Object Lock Governance 90 ngày và `force_destroy=false`; destroy có thể không xoá hết bucket nếu có object audit bị retention.
-- Nếu destroy fail vì resource còn data, xử lý đúng resource đó rồi chạy destroy lại.
-- Sau destroy nên verify bằng AWS API, không chỉ tin local state.
+- Audit bucket bat Object Lock Governance 90 ngay va `force_destroy=false`; destroy
+  co the khong xoa het bucket neu co object audit bi retention.
+- Neu destroy fail vi resource con data, xu ly dung resource do roi chay destroy
+  lai.
+- Sau destroy nen verify bang AWS API, khong chi tin local state.

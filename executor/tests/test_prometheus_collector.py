@@ -120,6 +120,17 @@ def test_promql_uses_http_requests_total():
         "FAIL: PrometheusCollector phải query histogram_seconds_bucket"
 
 
+def test_promql_accepts_code_and_status_error_labels():
+    """
+    Podinfo emits `code`; ecommerce demo emits `status`.
+    CDO must support both or service_error_rate will be silent for one workload.
+    """
+    import inspect
+    src = inspect.getsource(PrometheusCollector.collect)
+    assert 'code=~"5.."' in src
+    assert 'status=~"5.."' in src
+
+
 def test_promql_filters_by_deployment_label():
     """
     PromQL filter theo label `deployment` (relabel rule trong ServiceMonitor

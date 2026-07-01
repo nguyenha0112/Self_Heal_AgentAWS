@@ -1,33 +1,23 @@
 """
-Scenario runner — inject các scenario, đo AUTO-RESOLVE RATE (hard requirement #2:
-≥60% trên ≥10 scenarios) và có thể LOOP tới --duration cho test window ≥4h (req #3).
+Run CDO executor scenarios against the configured AI Engine.
 
-Chạy:
-    python run_scenarios.py                  # 1 lượt, in summary + per-scenario
-    python run_scenarios.py --duration 4h    # loop 4 giờ rồi aggregate
-    python run_scenarios.py --duration 600   # loop 600 giây
-
-- Tự khởi động mock_ai_server.py (scenario-driven).
-- Ép CDO_K8S_MOCK=true (không cần cluster thật).
-- Chỉ nạp file scenarios/sc*.json (bỏ qua tc01 smoke test).
-- Auto-resolved = outcome ∈ {auto_resolved, rolled_back} (rollback = hệ thống tự khắc phục an toàn).
-- exit code 0 nếu rate ≥60% VÀ không scenario nào lệch expected_outcome; ngược lại 1.
+The runner no longer starts mock_ai_server.py. Set AI_BASE_URL to the real local
+or in-cluster AI Engine endpoint before running.
 """
 from __future__ import annotations
 
 import glob
 import json
 import os
-import socket
-import subprocess
 import sys
 import time
 
-# phải set TRƯỚC khi import config/main (CONFIG đọc env lúc import)
-os.environ.setdefault("CDO_K8S_MOCK", "true")
-os.environ.setdefault("AI_BASE_URL", "http://127.0.0.1:8080")
 
+os.environ.setdefault("CDO_K8S_MOCK", "true")
+
+from config import CONFIG  # noqa: E402
 from main import Executor  # noqa: E402
+
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 SCENARIO_DIR = os.path.join(_HERE, "scenarios")
@@ -55,16 +45,19 @@ def load_scenarios() -> list[dict]:
 def run_once(scenarios: list[dict], verbose: bool = False) -> list[dict]:
     results = []
     for sc in scenarios:
-        ex = Executor()  # fresh executor → cô lập flap/breaker state giữa scenario
+        ex = Executor()
         outcome = ex.handle_incident(
             sc["telemetry_window"], sc["tenant_namespace"],
             correlation_id=sc.get("correlation_id"),
         )
         expected = sc.get("expected_outcome")
-        match = (outcome == expected)
+        match = outcome == expected
         results.append({
-            "file": sc["_file"], "scenario": sc.get("scenario"),
-            "outcome": outcome, "expected": expected, "match": match,
+            "file": sc["_file"],
+            "scenario": sc.get("scenario"),
+            "outcome": outcome,
+            "expected": expected,
+            "match": match,
             "resolved": outcome in RESOLVED_OUTCOMES,
         })
         if verbose:
@@ -107,38 +100,23 @@ def main() -> None:
 
     scenarios = load_scenarios()
     print(f"Loaded {len(scenarios)} scenarios from {SCENARIO_DIR}")
+    print(f"AI_BASE_URL={CONFIG.ai_base_url}")
     if len(scenarios) < 10:
-        print(f"WARNING: chỉ có {len(scenarios)} scenarios (<10).", file=sys.stderr)
+        print(f"WARNING: only {len(scenarios)} scenarios (<10).", file=sys.stderr)
 
-    # pre-flight: cổng 8080 phải trống, nếu không runner sẽ nói chuyện với mock CŨ → kết quả sai
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        if s.connect_ex(("127.0.0.1", 8080)) == 0:
-            print("ERROR: cổng 8080 đang bị chiếm (mock server cũ?). "
-                  "Kill tiến trình đó rồi chạy lại.", file=sys.stderr)
-            sys.exit(2)
-
-    proc = subprocess.Popen(
-        [sys.executable, "mock_ai_server.py"], cwd=_HERE,
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-    )
-    time.sleep(1.5)
-    try:
-        all_results: list[dict] = []
-        rounds = 0
-        deadline = time.time() + duration
-        first = True
-        while True:
-            all_results += run_once(scenarios, verbose=first)
-            first = False
-            rounds += 1
-            if time.time() >= deadline:
-                break
-            if duration:
-                time.sleep(1)  # nhịp nhẹ giữa các vòng trong test window dài
-        code = summarize(all_results, rounds)
-    finally:
-        proc.terminate()
-    sys.exit(code)
+    all_results: list[dict] = []
+    rounds = 0
+    deadline = time.time() + duration
+    first = True
+    while True:
+        all_results += run_once(scenarios, verbose=first)
+        first = False
+        rounds += 1
+        if time.time() >= deadline:
+            break
+        if duration:
+            time.sleep(1)
+    sys.exit(summarize(all_results, rounds))
 
 
 if __name__ == "__main__":

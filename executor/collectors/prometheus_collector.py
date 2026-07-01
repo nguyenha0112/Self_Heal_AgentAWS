@@ -94,8 +94,10 @@ class PrometheusCollector:
         queries = {
             # 5xx / total — clamp [0.0, 1.0] trong _to_value()
             "service_error_rate":
-                f'sum(rate(http_requests_total{{deployment="{deployment}",'
-                f'code=~"5.."}}[1m])) / '
+                f'((sum(rate(http_requests_total{{deployment="{deployment}",'
+                f'code=~"5.."}}[1m])) or vector(0)) + '
+                f'(sum(rate(http_requests_total{{deployment="{deployment}",'
+                f'status=~"5.."}}[1m])) or vector(0))) / '
                 f'sum(rate(http_requests_total{{deployment="{deployment}"}}[1m]))',
             # p95 latency — query seconds, convert → milliseconds trong _to_value()
             "service_latency_p95":
