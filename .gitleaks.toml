@@ -11,7 +11,10 @@ useDefault = true
 description = "Bỏ false-positive: UUID ví dụ trong contract/evidence + folder tài liệu/đội khác"
 
 commits = [
+  '''3576cb3f84ad85caff2673487db58501d537d6f7''',  # false-positive hashicorp-tf-password on Grafana passwordKey field
   '''83ddc3e7c41bd8f3d8b338ce8a9b7ccdae10521e''',  # false-positive hashicorp-tf-password on Grafana passwordKey field
+  '''9d1a681e0f0a5309659f0938e6bfdcc9edcfc13f''',  # false-positive hashicorp-tf-password on Grafana passwordKey field
+  '''38d5ea12b01b1b5b379ef254fc2279f2921b3c5c''',  # false-positive hashicorp-tf-password on Grafana passwordKey field
   '''96738362aa1097ee6408bef58e78c0017be7230b''',  # false-positive hashicorp-tf-password on Grafana passwordKey field
 ]
 

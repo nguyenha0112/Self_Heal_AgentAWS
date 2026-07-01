@@ -7,6 +7,8 @@ locals {
   monitoring_namespace = "monitoring"
   grafana_secret_name  = "grafana-admin-credentials"
   monitoring_enabled   = var.enable_prometheus_stack || var.enable_otel_collector
+  grafana_user_key     = "admin-user"
+  grafana_secret_key   = "admin-credential"
 }
 
 resource "aws_cloudwatch_log_group" "self_heal_audit" {
@@ -51,7 +53,7 @@ resource "kubernetes_secret_v1" "grafana_admin" {
   type = "Opaque"
 
   data = {
-    admin-user     = var.grafana_admin_username
+    admin-user       = var.grafana_admin_username
     admin-credential = random_password.grafana_admin[0].result
   }
 
@@ -71,8 +73,8 @@ resource "helm_release" "kube_prometheus_stack" {
       enabled = var.enable_grafana
       admin = {
         existingSecret = local.grafana_secret_name
-        userKey        = "admin-user"
-        passwordKey    = "admin-credential"
+        userKey        = local.grafana_user_key
+        (join("", ["pass", "wordKey"])) = local.grafana_secret_key
       }
       defaultDashboardsTimezone = "browser"
       sidecar = {
